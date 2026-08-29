@@ -9,6 +9,9 @@ node_modules/
 .env.*.local
 !.env.example
 
+# Allow lykasuser .env (unignore this specific path only)
+!lykasuser/.env
+
 # Build outputs
 dist/
 build/
