@@ -44,3 +44,6 @@ ios/Pods/
 android/.gradle/
 android/app/build/
 ios/build/
+
+#lykasuser .env
+!lykasuser/.env  
