@@ -27,14 +27,24 @@ export function getRedirectTarget(params: {
   isAuthenticated: boolean;
   loading: boolean;
   segments: readonly string[];
+  // True for exactly one redirect: the one immediately after a successful
+  // sign-up (email or Google). Previously signUp.tsx issued its own
+  // router.replace("/onboarding") right after register()/loginWithGoogle(),
+  // which raced this same effect's "authenticated user still in (auth) ->
+  // send to tabs" rule below — whichever replace() landed second silently
+  // won, so new users sometimes skipped onboarding entirely. Routing that
+  // decision through this single function instead removes the race by
+  // construction: there is now exactly one place that decides where a
+  // freshly-authenticated user goes.
+  justRegistered?: boolean;
 }): string | null {
-  const { isAuthenticated, loading, segments } = params;
+  const { isAuthenticated, loading, segments, justRegistered = false } = params;
   if (loading || segments.length === 0) return null;
 
   const inAuthGroup = segments[0] === "(auth)";
   const isPublicRoute = inAuthGroup || PUBLIC_ROUTES.has(segments[0]);
 
   if (!isAuthenticated && !isPublicRoute) return "/(auth)/logIn";
-  if (isAuthenticated && inAuthGroup) return "/(tabs)";
+  if (isAuthenticated && inAuthGroup) return justRegistered ? "/onboarding" : "/(tabs)";
   return null;
 }

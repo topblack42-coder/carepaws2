@@ -65,14 +65,20 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, ErrorBoundary
  * tested on its own — see __tests__/route-guard.test.ts.
  */
 function RootNavigation() {
-  const { user, loading } = useAuth();
+  const { user, loading, justRegistered, clearJustRegistered } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    const target = getRedirectTarget({ isAuthenticated: !!user, loading, segments });
-    if (target) router.replace(target);
-  }, [user, loading, segments, router]);
+    const target = getRedirectTarget({ isAuthenticated: !!user, loading, segments, justRegistered });
+    if (target) {
+      router.replace(target);
+      // One-shot: this flag's only job is steering this specific redirect
+      // toward /onboarding instead of /(tabs). Clear it immediately so it
+      // can't affect any later navigation for the rest of the session.
+      if (target === "/onboarding") clearJustRegistered();
+    }
+  }, [user, loading, segments, justRegistered, clearJustRegistered, router]);
 
   // Hold every screen — including public ones — behind the splash-style
   // spinner until session restoration resolves, matching the spinner

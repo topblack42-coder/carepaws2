@@ -56,7 +56,34 @@ describe("getRedirectTarget", () => {
 
   it("sends an already-authenticated user out of the (auth) screens instead of leaving them on the login form", () => {
     expect(getRedirectTarget({ isAuthenticated: true, loading: false, segments: ["(auth)", "logIn"] })).toBe("/(tabs)");
+    // Plain login (justRegistered omitted/false) still goes straight to tabs —
+    // only a fresh sign-up should detour through onboarding.
     expect(getRedirectTarget({ isAuthenticated: true, loading: false, segments: ["(auth)", "signUp"] })).toBe("/(tabs)");
+  });
+
+  /**
+   * Regression coverage for the "new users skip onboarding" bug:
+   * signUp.tsx used to issue its own router.replace("/onboarding") right
+   * after register(), which raced this exact guard — since both fire off
+   * the same "user just became authenticated" state change, whichever
+   * replace() landed second silently won, so sign-up sometimes dropped
+   * straight into (tabs) instead of onboarding. Routing the decision
+   * through getRedirectTarget itself (via justRegistered) removes the race
+   * by construction: there is only one function deciding the destination.
+   */
+  it("sends a freshly-registered user to onboarding instead of straight to tabs", () => {
+    expect(
+      getRedirectTarget({ isAuthenticated: true, loading: false, segments: ["(auth)", "signUp"], justRegistered: true })
+    ).toBe("/onboarding");
+    // Also covers the Google sign-up path, which lands on the same segments.
+    expect(
+      getRedirectTarget({ isAuthenticated: true, loading: false, segments: ["(auth)", "logIn"], justRegistered: true })
+    ).toBe("/onboarding");
+  });
+
+  it("does not send a returning user to onboarding just because justRegistered was left set somewhere it shouldn't be", () => {
+    expect(getRedirectTarget({ isAuthenticated: true, loading: false, segments: ["(tabs)"], justRegistered: true })).toBeNull();
+    expect(getRedirectTarget({ isAuthenticated: true, loading: false, segments: ["my-pets"], justRegistered: true })).toBeNull();
   });
 
   it("leaves an authenticated user alone everywhere else", () => {

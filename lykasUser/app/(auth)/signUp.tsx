@@ -1,7 +1,7 @@
 // app/(auth)/signUp.tsx
 import { useState } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
-import { Link, router } from "expo-router";
+import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Ionicons } from "@expo/vector-icons";
@@ -12,7 +12,7 @@ import FormInput from "../../components/FormInput";
 import colors from "../../utils/colors";
 
 export default function SignUpScreen() {
-  const { register, loginWithGoogle } = useAuth();
+  const { register, loginWithGoogle, markJustRegistered } = useAuth();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +36,11 @@ export default function SignUpScreen() {
     setLoading(true);
     try {
       await register(displayName, email, password);
-      router.replace("/onboarding");
+      // No router.replace here: register() sets justRegistered, and the
+      // root layout's navigation guard (app/_layout.tsx) is the single
+      // place that now decides where a freshly-authenticated user goes —
+      // see routeGuard.ts for why a second, competing replace() here used
+      // to race that guard and sometimes skip onboarding entirely.
     } catch (err) {
       setError(getApiErrorMessage(err, "Couldn't create your account"));
     } finally {
@@ -52,8 +56,12 @@ export default function SignUpScreen() {
       const result = await GoogleSignin.signIn();
       const idToken = result.data?.idToken;
       if (!idToken) throw new Error("Google sign-in didn't return a token");
+      // loginWithGoogle() is shared with the login screen, so it can't set
+      // justRegistered itself — mark it here, from the screen that knows
+      // this call means "sign up," before the shared context method runs.
+      markJustRegistered();
       await loginWithGoogle(idToken);
-      router.replace("/onboarding");
+      // No router.replace here — see the comment in handleSignUp above.
     } catch (err) {
       setError(getApiErrorMessage(err, "Google sign-in failed"));
     } finally {

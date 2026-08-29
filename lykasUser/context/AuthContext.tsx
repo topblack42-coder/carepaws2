@@ -16,11 +16,25 @@ export interface AppUser {
 interface AuthContextValue {
   user: AppUser | null;
   loading: boolean;
+  // True for exactly one redirect immediately after a successful sign-up —
+  // consumed and cleared by the root navigation guard, which uses it to
+  // route new users through /onboarding instead of straight to /(tabs).
+  // See routeGuard.ts for why this replaced signUp.tsx's own
+  // router.replace("/onboarding") call.
+  justRegistered: boolean;
   register: (displayName: string, email: string, password: string) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  // Google sign-in is shared between the login and sign-up screens (same
+  // AuthContext.loginWithGoogle call either way), so unlike register() it
+  // can't set justRegistered itself — the sign-up screen calls this first
+  // to mark the flow as a registration before invoking loginWithGoogle.
+  markJustRegistered: () => void;
+  // Called by the root layout once the /onboarding redirect has been
+  // issued, so the flag doesn't linger after it's served its purpose.
+  clearJustRegistered: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -28,6 +42,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [justRegistered, setJustRegistered] = useState(false);
   // Prevents loadMe() from clearing user immediately after a successful login
   const [skipLoadMeOnce, setSkipLoadMeOnce] = useState(false);
 
@@ -85,9 +100,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     await tokenStore.setTokens(accessToken, refreshToken);
     setUser(newUser);
+    setJustRegistered(true);
     // Skip the immediate loadMe() call after registration
     setSkipLoadMeOnce(true);
   }, []);
+
+  const markJustRegistered = useCallback(() => setJustRegistered(true), []);
+  const clearJustRegistered = useCallback(() => setJustRegistered(false), []);
 
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post("/api/auth/login", { email, password });
@@ -136,8 +155,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, loading, register, login, loginWithGoogle, logout, refreshUser }),
-    [user, loading, register, login, loginWithGoogle, logout, refreshUser]
+    () => ({
+      user,
+      loading,
+      justRegistered,
+      register,
+      login,
+      loginWithGoogle,
+      logout,
+      refreshUser,
+      markJustRegistered,
+      clearJustRegistered,
+    }),
+    [user, loading, justRegistered, register, login, loginWithGoogle, logout, refreshUser, markJustRegistered, clearJustRegistered]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
