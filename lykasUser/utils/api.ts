@@ -55,7 +55,7 @@ export function getResponseStatus(err: unknown): number | undefined {
   return axios.isAxiosError(err) ? err.response?.status : undefined;
 }
 
-type RefreshResult = { accessToken: string } | { error: "invalid" | "network" };
+type RefreshResult = { accessToken: string } | { error: "invalid" | "network" | "missing_refresh_token" };
 
 let refreshInFlight: Promise<RefreshResult> | null = null;
 let onSessionExpired: (() => void) | null = null;
@@ -67,7 +67,12 @@ export function setSessionExpiredHandler(handler: () => void) {
 
 async function refreshAccessToken(): Promise<RefreshResult> {
   const refreshToken = await tokenStore.getRefreshToken();
-  if (!refreshToken) return { error: "invalid" };
+  if (!refreshToken) {
+    // Distinguish between a confirmed-invalid refresh (server told us) and
+    // a missing refresh token locally (client-side parsing/storage issue).
+    console.warn('[api] refreshAccessToken called but no refresh token found');
+    return { error: "missing_refresh_token" };
+  }
 
   try {
     const res = await axios.post(`${API_URL}/api/auth/refresh`, { refreshToken });
@@ -111,7 +116,7 @@ api.interceptors.response.use(
       }
 
       const result = await refreshInFlight;
-      if ("accessToken" in result) {
+      if (result && "accessToken" in result) {
         original.headers = original.headers ?? {};
         original.headers.Authorization = `Bearer ${result.accessToken}`;
         return api(original);
@@ -121,9 +126,12 @@ api.interceptors.response.use(
       // session. On "network", leave the user's local session state alone —
       // the original error below still surfaces to the caller so this one
       // request fails, but we don't sign them out over a connectivity blip.
-      if (result.error === "invalid") {
+      if (result && result.error === "invalid") {
         onSessionExpired?.();
       }
+      // For missing_refresh_token or network, do not call onSessionExpired here;
+      // allow the calling code / later attempts to surface the condition so
+      // we avoid clearing a possibly-valid session over a local storage bug.
     }
 
     return Promise.reject(error);

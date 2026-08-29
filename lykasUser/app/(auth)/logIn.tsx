@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import { getApiErrorMessage } from "../../utils/api";
+import { getApiErrorMessage, tokenStore } from "../../utils/api";
 import PrimaryButton from "../../components/PrimaryButton";
 import FormInput from "../../components/FormInput";
 import colors from "../../utils/colors";
@@ -29,9 +29,14 @@ export default function LogInScreen() {
     setLoading(true);
     try {
       await login(email, password);
+
+      // Defensive: ensure the refresh token was persisted before navigating.
+      const rt = await tokenStore.getRefreshToken();
+      if (!rt) throw new Error("Session could not be established. Please try again.");
+
       router.replace("/(tabs)");
     } catch (err) {
-      setError(getApiErrorMessage(err, "Couldn't log you in — check your email and password."));
+      setError(err instanceof Error ? err.message : getApiErrorMessage(err, "Couldn't log you in — check your email and password."));
     } finally {
       setLoading(false);
     }
@@ -49,6 +54,10 @@ export default function LogInScreen() {
       const idToken = result.data?.idToken;
       if (!idToken) throw new Error("Google sign-in didn't return a token");
       await loginWithGoogle(idToken);
+
+      const rt = await tokenStore.getRefreshToken();
+      if (!rt) throw new Error("Session could not be established. Please try again.");
+
       router.replace("/(tabs)");
     } catch (err) {
       setError(getApiErrorMessage(err, "Google sign-in failed"));
@@ -76,12 +85,12 @@ export default function LogInScreen() {
         <FormInput label="Password" value={password} onChangeText={setPassword} isPassword testID="login-password" />
 
         <Link href="/forgot-password" asChild>
-          <Pressable className="mb-5 self-end" accessibilityRole="button">
-            <Text className="font-sans-medium text-sm text-primary">Forgot password?</Text>
+          <Pressable accessibilityRole="button">
+            <Text className="mb-4 mt-2 text-right font-sans text-sm text-primary">Forgot your password?</Text>
           </Pressable>
         </Link>
 
-        <PrimaryButton label="Sign in" onPress={handleLogin} loading={loading} testID="login-submit" />
+        <PrimaryButton label="Sign in" onPress={handleLogin} loading={loading} className="mt-2" testID="login-submit" />
 
         <View className="my-5 flex-row items-center gap-3">
           <View className="h-px flex-1 bg-border" />
@@ -89,18 +98,13 @@ export default function LogInScreen() {
           <View className="h-px flex-1 bg-border" />
         </View>
 
-        <PrimaryButton
-          label="Continue with Google"
-          variant="secondary"
-          onPress={handleGoogleLogin}
-          loading={googleLoading}
-        />
+        <PrimaryButton label="Continue with Google" variant="secondary" onPress={handleGoogleLogin} loading={googleLoading} />
 
         <View className="mt-8 flex-row justify-center gap-1">
-          <Text className="font-sans text-sm text-muted">Don&apos;t have an account?</Text>
+          <Text className="font-sans text-sm text-muted">New here?</Text>
           <Link href="/signUp" asChild>
             <Pressable accessibilityRole="button">
-              <Text className="font-sans-medium text-sm text-primary">Sign up</Text>
+              <Text className="font-sans-medium text-sm text-primary">Create an account</Text>
             </Pressable>
           </Link>
         </View>

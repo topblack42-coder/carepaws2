@@ -77,6 +77,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(async (displayName: string, email: string, password: string) => {
     const res = await api.post("/api/auth/register", { displayName, email, password });
     const { user: newUser, accessToken, refreshToken } = res.data.data;
+
+    // Defensive: require both tokens from the server before committing session
+    if (!accessToken || !refreshToken) {
+      throw new Error("Authentication response missing tokens.");
+    }
+
     await tokenStore.setTokens(accessToken, refreshToken);
     setUser(newUser);
     // Skip the immediate loadMe() call after registration
@@ -86,6 +92,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const res = await api.post("/api/auth/login", { email, password });
     const { user: loggedInUser, accessToken, refreshToken } = res.data.data;
+
+    // Defensive: ensure tokens are present
+    if (!accessToken || !refreshToken) {
+      throw new Error("Authentication response missing tokens.");
+    }
+
     await tokenStore.setTokens(accessToken, refreshToken);
     setUser(loggedInUser);
     // Skip the immediate loadMe() call after login to avoid race condition
@@ -95,6 +107,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithGoogle = useCallback(async (idToken: string) => {
     const res = await api.post("/api/auth/google", { idToken, platform: "mobile" });
     const { user: loggedInUser, accessToken, refreshToken } = res.data.data;
+
+    // Defensive: ensure tokens are present
+    if (!accessToken || !refreshToken) {
+      throw new Error("Authentication response missing tokens.");
+    }
+
     await tokenStore.setTokens(accessToken, refreshToken);
     setUser(loggedInUser);
     // Skip the immediate loadMe() call after Google login to avoid race condition
