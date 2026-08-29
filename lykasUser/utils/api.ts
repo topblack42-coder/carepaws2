@@ -148,6 +148,13 @@ export function getApiErrorMessage(err: unknown, fallback = "Something went wron
     if (data?.message) return data.message;
     if (err.code === "ECONNABORTED") return "The request timed out — check your connection and try again.";
     if (!err.response) return "Can't reach the server — check your internet connection and try again.";
+    return fallback;
   }
+  // A plain, non-axios Error — e.g. AuthContext's own "Authentication
+  // response missing tokens." guard, thrown before/without a request
+  // ever failing. Its own .message is the useful text here, unlike an
+  // AxiosError's (also caught by `instanceof Error`, which is why this
+  // must come after the axios branch above, not replace it).
+  if (err instanceof Error) return err.message;
   return fallback;
 }

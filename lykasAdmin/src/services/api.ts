@@ -102,6 +102,19 @@ export function getApiErrorMessage(err: unknown, fallback = "Something went wron
       return data.errors.map((e) => (e.field ? `${e.field}: ${e.message}` : e.message)).join(", ");
     }
     if (data?.message) return data.message;
+    // No parseable server message on an HTTP-level failure (e.g. a 403
+    // from something in front of the API — CORS, a WAF/proxy block —
+    // that never reached our Express handlers, so there's no {message}
+    // body to read). Falling through to axios's own generic
+    // "Request failed with status code N" here isn't useful, so treat it
+    // the same as any other unrecognized case: the caller's fallback.
+    return fallback;
   }
+  // A plain, non-axios Error — e.g. a client-side guard thrown before any
+  // request was made (see AuthContext.login's "no admin panel access"
+  // check). Its own .message *is* the useful text here, unlike an
+  // AxiosError's (also caught by `instanceof Error`, which is why this
+  // check must come after the axios branch above, not replace it).
+  if (err instanceof Error) return err.message;
   return fallback;
 }

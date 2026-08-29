@@ -29,7 +29,7 @@ export default function Login() {
       await login(email, password);
       navigate("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : getApiErrorMessage(err, "Login failed"));
+      setError(getApiErrorMessage(err, "Login failed"));
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export default function Login() {
                   await loginWithGoogle(credentialResponse.credential);
                   navigate("/");
                 } catch (err) {
-                  setError(err instanceof Error ? err.message : getApiErrorMessage(err, "Google sign-in failed"));
+                  setError(getApiErrorMessage(err, "Google sign-in failed"));
                 }
               }}
               onError={() => setError("Google sign-in failed")}

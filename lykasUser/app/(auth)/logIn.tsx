@@ -36,7 +36,7 @@ export default function LogInScreen() {
 
       router.replace("/(tabs)");
     } catch (err) {
-      setError(err instanceof Error ? err.message : getApiErrorMessage(err, "Couldn't log you in — check your email and password."));
+      setError(getApiErrorMessage(err, "Couldn't log you in — check your email and password."));
     } finally {
       setLoading(false);
     }
