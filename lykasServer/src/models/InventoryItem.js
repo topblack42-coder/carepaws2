@@ -31,9 +31,13 @@ const inventoryItemSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-inventoryItemSchema.pre("validate", function (next) {
+// Mongoose 9 dropped support for the next()-callback style entirely — a
+// pre hook now just runs (sync or async) and finishes on its own; there
+// is no next argument to call. The old `function (next) { ...; next(); }`
+// form here threw "next is not a function" on every save, because v9
+// simply never passes anything into that parameter.
+inventoryItemSchema.pre("validate", function () {
   if (this.name) this.normalizedName = this.name.trim().toLowerCase();
-  next();
 });
 
 module.exports = mongoose.model("InventoryItem", inventoryItemSchema);
