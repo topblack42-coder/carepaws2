@@ -9,7 +9,7 @@ const logger = require("./logger");
  * was never wired up in the source (§6.6): expo-notifications was
  * declared as a dependency but never called anywhere.
  */
-async function notify({ recipient, sender = null, type, title, message, refModel = null, refId = null, dedupeKey = null }) {
+async function notify({ recipient, sender = null, type, title, message, refModel = null, refId = null, dedupeKey = undefined }) {
   const notification = await Notification.create({ recipient, sender, type, title, message, refModel, refId, dedupeKey });
 
   try {

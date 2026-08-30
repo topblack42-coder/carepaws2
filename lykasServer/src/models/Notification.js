@@ -26,7 +26,20 @@ const notificationSchema = new mongoose.Schema(
     },
     refId: { type: mongoose.Schema.Types.ObjectId, default: null },
     isRead: { type: Boolean, default: false },
-    dedupeKey: { type: String, default: null },
+    // No `default: null` here on purpose: this field is only ever set by
+    // notifyOnce() callers that want idempotency (payments, reminders,
+    // chat messages, etc.). Every one of those passes its own unique
+    // string. The one caller that doesn't — the admin "send a
+    // notification" feature, via notify() directly — must NOT get an
+    // explicit null written here, because the index below is
+    // { unique: true, sparse: true }, and a sparse index only skips
+    // documents where the field is completely absent, not documents
+    // where it's present with value null. With a null default, every
+    // such notification wrote dedupeKey: null, so only the very first
+    // one ever created could succeed — every one after it hit
+    // E11000 duplicate key on dedupeKey_1. Leaving the field genuinely
+    // unset (no default at all) is what makes "sparse" work as intended.
+    dedupeKey: { type: String },
     readAt: { type: Date, default: null },
   },
   { timestamps: true }
