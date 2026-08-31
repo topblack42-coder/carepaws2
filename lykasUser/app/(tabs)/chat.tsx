@@ -34,14 +34,14 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState("");
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const listRef = useRef<FlatList>(null);
+  const listRef = useRef<FlatList<ChatMessageData> | null>(null);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
     setError(null);
     try {
       const res = await api.get(`/api/messages/${user.id}`);
-      setMessages((prev) => mergeMessages(prev, res.data.data));
+      setMessages((prev: ChatMessageData[]) => mergeMessages(prev, res.data.data));
     } catch (err) {
       setError(getApiErrorMessage(err, "Failed to load chat history"));
     } finally {
@@ -74,7 +74,7 @@ export default function ChatScreen() {
 
       socket.on("receiveMessage", (message: ChatMessageData & { userId: string }) => {
         if (message.userId !== user.id) return; // not this conversation
-        setMessages((prev) => mergeMessages(prev, [message]));
+        setMessages((prev: ChatMessageData[]) => mergeMessages(prev, [message]));
       });
     })();
 
@@ -137,7 +137,7 @@ export default function ChatScreen() {
               keyExtractor={(m) => m._id}
               className="flex-1"
               contentContainerClassName="px-5 py-4"
-              renderItem={({ item }) => <ChatMessage message={item} isOwn={item.sender === "user"} />}
+              renderItem={({ item }: { item: ChatMessageData }) => <ChatMessage message={item} isOwn={item.sender === "user"} />}
             />
           )}
         </View>

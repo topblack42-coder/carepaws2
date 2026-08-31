@@ -84,8 +84,8 @@ export default function PetDetailScreen() {
   ].filter((f) => f.value);
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
-      <ScrollView contentContainerClassName="pb-8">
+    <SafeAreaView className="flex-1 bg-cream" edges={["top", "bottom"]}>
+      <ScrollView contentContainerClassName="pb-12">
         <View className="h-72 bg-cardBg">
           {pet.imageUrl ? (
             <Image source={{ uri: pet.imageUrl }} style={{ width: "100%", height: "100%" }} contentFit="cover" />

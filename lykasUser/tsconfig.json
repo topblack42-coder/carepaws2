@@ -3,6 +3,8 @@
   "compilerOptions": {
     "strict": true,
     "baseUrl": ".",
+    "jsx": "react-native",
+    "types": ["node", "jest"],
     "paths": {
       "@/*": [
         "./*"
