@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { View, Text, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform } from "react-native";
+import { View, Text, FlatList, TextInput, Pressable, KeyboardAvoidingView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { io, type Socket } from "socket.io-client";
 import { Ionicons } from "@expo/vector-icons";
@@ -34,14 +34,14 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState("");
   const [connected, setConnected] = useState(false);
   const socketRef = useRef<Socket | null>(null);
-  const listRef = useRef<FlatList<ChatMessageData> | null>(null);
+  const listRef = useRef<FlatList>(null);
 
   const loadHistory = useCallback(async () => {
     if (!user) return;
     setError(null);
     try {
       const res = await api.get(`/api/messages/${user.id}`);
-      setMessages((prev: ChatMessageData[]) => mergeMessages(prev, res.data.data));
+      setMessages((prev) => mergeMessages(prev, res.data.data));
     } catch (err) {
       setError(getApiErrorMessage(err, "Failed to load chat history"));
     } finally {
@@ -74,7 +74,7 @@ export default function ChatScreen() {
 
       socket.on("receiveMessage", (message: ChatMessageData & { userId: string }) => {
         if (message.userId !== user.id) return; // not this conversation
-        setMessages((prev: ChatMessageData[]) => mergeMessages(prev, [message]));
+        setMessages((prev) => mergeMessages(prev, [message]));
       });
     })();
 
@@ -114,17 +114,20 @@ export default function ChatScreen() {
       </View>
 
       {/*
-        Android's default windowSoftInputMode is "adjustResize" (not
-        overridden in app.json), which already shrinks the window to
-        make room for the keyboard. Also passing behavior="height" here
-        made KeyboardAvoidingView shrink this view a second time on top
-        of that — the input row ended up pushed below the visible
-        viewport the instant the keyboard opened, only reappearing once
-        it closed. undefined on Android means "let the OS's own resize
-        handle it," which is correct given adjustResize is active; iOS
-        has no equivalent OS behavior, so it still needs "padding".
+        Correction to the previous fix here: this app has Android
+        edge-to-edge enabled (Expo 53+ default, not overridden in
+        app.json), and starting on Android 15, edge-to-edge breaks
+        windowSoftInputMode="adjustResize" / softwareKeyboardLayoutMode:
+        "resize" — the OS stops automatically shrinking the window for
+        the keyboard (this is a documented RN/Expo behavior change, not
+        a bug in this app specifically). That means behavior={undefined}
+        left nothing compensating for the keyboard at all, which is why
+        the input row was still hidden. With the OS no longer resizing
+        the window, "padding" is the correct behavior on Android too now
+        — same as iOS — since compensation has to happen at the JS
+        level instead.
       */}
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView className="flex-1" behavior="padding">
         <View className="flex-1">
           {error ? (
             <StateView state="error" message={error} onRetry={loadHistory} />
@@ -137,7 +140,7 @@ export default function ChatScreen() {
               keyExtractor={(m) => m._id}
               className="flex-1"
               contentContainerClassName="px-5 py-4"
-              renderItem={({ item }: { item: ChatMessageData }) => <ChatMessage message={item} isOwn={item.sender === "user"} />}
+              renderItem={({ item }) => <ChatMessage message={item} isOwn={item.sender === "user"} />}
             />
           )}
         </View>
