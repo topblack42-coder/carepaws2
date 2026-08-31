@@ -138,7 +138,20 @@ async function webhook(req, res, next) {
     const valid =
       expected.length === signature.length &&
       crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
-    if (!valid) return res.status(401).json({ success: false, message: "Invalid webhook signature" });
+    if (!valid) {
+      // This is the one webhook failure mode that used to return silently
+      // with no log line at all — every other branch (missing secret,
+      // an uncaught exception) logs, so a mismatched
+      // PAYMONGO_WEBHOOK_SECRET (e.g. after rotating/recreating the
+      // webhook in PayMongo's dashboard without updating this env var)
+      // was indistinguishable from the request never reaching the server
+      // in the first place. Never log the signature or secret values
+      // themselves — just the fact of a mismatch, which is enough to
+      // point at "check PAYMONGO_WEBHOOK_SECRET" instead of chasing
+      // network/connectivity theories.
+      logger.error("PayMongo webhook signature mismatch — check PAYMONGO_WEBHOOK_SECRET matches the active webhook's secret in the PayMongo dashboard");
+      return res.status(401).json({ success: false, message: "Invalid webhook signature" });
+    }
 
     const { eventId, eventType, resource } = extractWebhookEvent(req);
     const { paymentId, relatedPaymentId, referenceNumber, paymentAttributes } = extractPaymentData(eventType, resource);
