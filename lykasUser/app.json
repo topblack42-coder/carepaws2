@@ -61,7 +61,8 @@
           "color": "#1E6B45"
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
