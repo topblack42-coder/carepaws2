@@ -124,20 +124,44 @@ async function createCheckout(req, res, next) {
 // POST /api/payments/webhook — gateway -> server
 async function webhook(req, res, next) {
   try {
-    const signature = req.headers["paymongo-signature"];
+    const signatureHeader = req.headers["paymongo-signature"];
     const secret = process.env.PAYMONGO_WEBHOOK_SECRET;
 
     if (!secret) {
       logger.error("PAYMONGO_WEBHOOK_SECRET is not configured — rejecting webhook");
       return res.status(500).json({ success: false, message: "Webhook not configured" });
     }
-    if (!signature) return res.status(401).json({ success: false, message: "Missing webhook signature" });
+    if (!signatureHeader) return res.status(401).json({ success: false, message: "Missing webhook signature" });
+
+    // Paymongo-Signature is a composite string — "t=<timestamp>,te=<test
+    // signature>,li=<live signature>" — not the signature itself. The
+    // previous code compared this whole raw header value directly against
+    // a computed hex digest, which could never match (wrong shape, wrong
+    // length) no matter what PAYMONGO_WEBHOOK_SECRET was set to. That's
+    // the real reason every delivery failed even after the secret was
+    // confirmed to match the dashboard exactly.
+    const sigParts = Object.fromEntries(
+      signatureHeader.split(",").map((part) => {
+        const [key, ...rest] = part.split("=");
+        return [key, rest.join("=")];
+      })
+    );
+    const timestamp = sigParts.t;
+    // A Test-mode webhook's secret signs under "te"; a Live one signs
+    // under "li". Accept whichever is present rather than hard-coding
+    // one, since a given delivery only carries its own mode's component.
+    const providedSignature = sigParts.te || sigParts.li;
+    if (!timestamp || !providedSignature) {
+      return res.status(401).json({ success: false, message: "Malformed webhook signature header" });
+    }
 
     const raw = req.rawBody ? req.rawBody : Buffer.from(JSON.stringify(req.body));
-    const expected = crypto.createHmac("sha256", secret).update(raw).digest("hex");
+    // PayMongo signs "{timestamp}.{raw body}" — not the raw body alone.
+    const signedPayload = Buffer.concat([Buffer.from(`${timestamp}.`), raw]);
+    const expected = crypto.createHmac("sha256", secret).update(signedPayload).digest("hex");
     const valid =
-      expected.length === signature.length &&
-      crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+      expected.length === providedSignature.length &&
+      crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(providedSignature));
     if (!valid) {
       // This is the one webhook failure mode that used to return silently
       // with no log line at all — every other branch (missing secret,
