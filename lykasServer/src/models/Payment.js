@@ -13,6 +13,17 @@ const paymentSchema = new mongoose.Schema(
     refId: { type: mongoose.Schema.Types.ObjectId, default: null },
     paymongoPaymentId: { type: String },
     paymongoCheckoutSessionId: { type: String, index: true },
+    // Captured at checkout-session creation time (from the session's
+    // nested payment_intent.id), not learned later from a successful
+    // payment. Unlike paymongoCheckoutSessionId's reference_number (only
+    // echoed back on checkout_session.* events, which PayMongo only ever
+    // sends on success) or paymongoPaymentId (only known once a payment
+    // has already been matched — no help for the very failure we're
+    // trying to detect), this ID appears on every payment.paid AND
+    // payment.failed event tied to this checkout, whether or not it
+    // ever succeeds. It's the only reliable way to find and mark a
+    // Payment "failed" when the checkout never completes.
+    paymongoPaymentIntentId: { type: String, index: true },
     paymongoRefundId: { type: String },
     paymongoRefundStatus: { type: String },
     paymongoCheckoutUrl: { type: String },

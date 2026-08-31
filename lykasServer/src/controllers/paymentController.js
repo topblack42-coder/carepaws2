@@ -39,16 +39,32 @@ function extractPaymentData(eventType, resource) {
     paymentAttributes.external_reference_number ||
     attributes.checkout_session?.reference_number;
   const relatedPaymentId = attributes.payment_id || paymentAttributes.payment_id || paymentId;
-  return { paymentId, relatedPaymentId, referenceNumber, paymentAttributes };
+  // Present on plain payment.paid/payment.failed payloads as
+  // payment_intent_id, and on checkout_session.* payloads as a nested
+  // payment_intent.id — check both shapes.
+  const paymentIntentId =
+    attributes.payment_intent_id ||
+    paymentAttributes.payment_intent_id ||
+    attributes.payment_intent?.id;
+  return { paymentId, relatedPaymentId, referenceNumber, paymentAttributes, paymentIntentId };
 }
 
-async function findPaymentByReference(referenceNumber, relatedPaymentId) {
+async function findPaymentByReference(referenceNumber, relatedPaymentId, paymentIntentId) {
   const conditions = [];
   if (referenceNumber) {
     conditions.push({ paymongoCheckoutSessionId: referenceNumber });
     if (/^[a-f0-9]{24}$/i.test(String(referenceNumber))) conditions.push({ _id: referenceNumber });
   }
   if (relatedPaymentId) conditions.push({ paymongoPaymentId: relatedPaymentId });
+  // The one condition that still works when a checkout never completes:
+  // a payment.failed event carries no reference_number (only
+  // checkout_session.* events do, and PayMongo never sends those for a
+  // failed/abandoned checkout) and no previously-known paymongoPaymentId
+  // (that field is only ever set once a payment has already succeeded).
+  // paymongoPaymentIntentId is captured at checkout-creation time, before
+  // any outcome is known, so it's the only field that reliably links a
+  // failure back to the right Payment document.
+  if (paymentIntentId) conditions.push({ paymongoPaymentIntentId: paymentIntentId });
   if (!conditions.length) return null;
   return Payment.findOne({ $or: conditions });
 }
@@ -100,6 +116,7 @@ async function createCheckout(req, res, next) {
       payment.paymongoCheckoutSessionId = checkoutData.data.id;
       payment.paymongoStatus = checkoutData.data.attributes?.status || "active";
       payment.paymongoCheckoutUrl = checkoutData.data.attributes.checkout_url;
+      payment.paymongoPaymentIntentId = checkoutData.data.attributes?.payment_intent?.id || null;
       await payment.save();
       await notifyOnce({
         recipient: payment.paidBy,
@@ -178,8 +195,8 @@ async function webhook(req, res, next) {
     }
 
     const { eventId, eventType, resource } = extractWebhookEvent(req);
-    const { paymentId, relatedPaymentId, referenceNumber, paymentAttributes } = extractPaymentData(eventType, resource);
-    const payment = await findPaymentByReference(referenceNumber, relatedPaymentId);
+    const { paymentId, relatedPaymentId, referenceNumber, paymentAttributes, paymentIntentId } = extractPaymentData(eventType, resource);
+    const payment = await findPaymentByReference(referenceNumber, relatedPaymentId, paymentIntentId);
 
     if (!payment) return res.status(200).json({ success: true, message: "Unknown payment reference — ignored" });
 
