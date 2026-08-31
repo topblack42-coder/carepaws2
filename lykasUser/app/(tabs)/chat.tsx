@@ -113,7 +113,18 @@ export default function ChatScreen() {
         <View className={`h-2 w-2 rounded-full ${connected ? "bg-status-success" : "bg-mutedLight"}`} accessibilityLabel={connected ? "Connected" : "Reconnecting"} />
       </View>
 
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      {/*
+        Android's default windowSoftInputMode is "adjustResize" (not
+        overridden in app.json), which already shrinks the window to
+        make room for the keyboard. Also passing behavior="height" here
+        made KeyboardAvoidingView shrink this view a second time on top
+        of that — the input row ended up pushed below the visible
+        viewport the instant the keyboard opened, only reappearing once
+        it closed. undefined on Android means "let the OS's own resize
+        handle it," which is correct given adjustResize is active; iOS
+        has no equivalent OS behavior, so it still needs "padding".
+      */}
+      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <View className="flex-1">
           {error ? (
             <StateView state="error" message={error} onRetry={loadHistory} />
