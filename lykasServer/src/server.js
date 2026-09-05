@@ -34,6 +34,27 @@ const { notifyOnce } = require("./utils/notificationHelper");
 const app = express();
 const server = http.createServer(app);
 
+// Safety net for errors outside Express's request/response cycle — cron
+// jobs (cronJob.js), Socket.IO handlers, or any other async code not
+// wrapped in a route handler. Those never reach errorHandler.js, and an
+// uncaught rejection/exception there crashes the *entire* process by
+// default in modern Node — taking down every connected user's session,
+// not just failing one request. Concretely, this is what protects
+// against ScheduledJobLog.create() in reminderJobs.js: it sits outside
+// that function's own try/catch, so a single transient DB hiccup during
+// the 7am cron run could otherwise have taken the whole API offline.
+// Logging (and reporting to Sentry, already initialized above) instead
+// of letting Node's default "crash" behavior run is what turns that
+// from a full outage into a visible, investigable log line.
+process.on("unhandledRejection", (err) => {
+  logger.error({ err }, "Unhandled promise rejection");
+  Sentry.captureException(err);
+});
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "Uncaught exception");
+  Sentry.captureException(err);
+});
+
 // ---- CORS ----
 // Requests with no Origin header (server-to-server calls, the payment
 // webhook) are allowed through unconditionally — this is intentional,

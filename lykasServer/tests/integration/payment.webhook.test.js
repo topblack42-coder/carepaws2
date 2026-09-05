@@ -29,8 +29,18 @@ function paymongoPayload({ referenceNumber, eventType = "payment.paid", sourceTy
   };
 }
 
-function signPayload(secret, payload) {
-  return crypto.createHmac("sha256", secret).update(JSON.stringify(payload)).digest("hex");
+// Builds a header in PayMongo's actual format: "t=<timestamp>,te=<hmac>"
+// (te = test-mode signature), hashing "{timestamp}.{body}" — not the
+// body alone. The previous version of this helper returned a bare hex
+// digest of the body alone, handed straight to the header as if it
+// *were* the signature. That matched the production bug it was meant
+// to test, so every "correctly signed" test here passed against a
+// completely broken implementation — it validated the code against
+// itself, not against what PayMongo actually sends. See
+// paymentController.js's webhook() for the corresponding fix.
+function signPayload(secret, payload, timestamp = Math.floor(Date.now() / 1000)) {
+  const hmac = crypto.createHmac("sha256", secret).update(`${timestamp}.${JSON.stringify(payload)}`).digest("hex");
+  return `t=${timestamp},te=${hmac}`;
 }
 
 describe("Payment webhook", () => {
@@ -192,7 +202,7 @@ describe("Payment webhook", () => {
     }
   });
 
-  it("rejects the webhook when a signature is required and doesn't match", async () => {
+  it("rejects the webhook when the signature header is present but malformed", async () => {
     const originalSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
     process.env.PAYMONGO_WEBHOOK_SECRET = "test_webhook_secret";
 
@@ -210,6 +220,38 @@ describe("Payment webhook", () => {
       const res = await request(app)
         .post("/api/payments/webhook")
         .set("paymongo-signature", "not-the-real-signature")
+        .send(payload);
+
+      expect(res.status).toBe(401);
+      expect((await Payment.findById(payment._id)).status).toBe("pending"); // unchanged
+    } finally {
+      process.env.PAYMONGO_WEBHOOK_SECRET = originalSecret;
+    }
+  });
+
+  it("rejects the webhook when the header is well-formed but the signature itself is wrong", async () => {
+    const originalSecret = process.env.PAYMONGO_WEBHOOK_SECRET;
+    process.env.PAYMONGO_WEBHOOK_SECRET = "test_webhook_secret";
+
+    try {
+      const payment = await Payment.create({
+        paidBy: payer._id,
+        type: "adoption_fee",
+        amount: 50000,
+        description: "Adoption fee",
+        status: "pending",
+      });
+
+      const payload = paymongoPayload({ referenceNumber: payment._id.toString() });
+      // Correctly shaped (t=/te=), but signed with the wrong secret — the
+      // realistic case of a stale/mismatched PAYMONGO_WEBHOOK_SECRET,
+      // as opposed to the malformed-header case above. This is the
+      // branch crypto.timingSafeEqual actually guards.
+      const signature = signPayload("some_other_secret", payload);
+
+      const res = await request(app)
+        .post("/api/payments/webhook")
+        .set("paymongo-signature", signature)
         .send(payload);
 
       expect(res.status).toBe(401);
