@@ -4,6 +4,7 @@ import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { FormField, Input, Select } from "../ui/FormUI";
 import TextArea from "../ui/TextArea";
+import PetVideoField from "./PetVideoField";
 
 interface AddPetModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ export default function AddPetModal({ isOpen, onClose, onSubmit, mutating, mutat
   const [size, setSize] = useState("Medium");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [video, setVideo] = useState<File | null>(null);
 
   function reset() {
     setName("");
@@ -32,6 +34,7 @@ export default function AddPetModal({ isOpen, onClose, onSubmit, mutating, mutat
     setSize("Medium");
     setDescription("");
     setImage(null);
+    setVideo(null);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -45,6 +48,7 @@ export default function AddPetModal({ isOpen, onClose, onSubmit, mutating, mutat
     formData.append("size", size);
     if (description) formData.append("description", description);
     if (image) formData.append("image", image);
+    if (video) formData.append("video", video);
 
     const success = await onSubmit(formData);
     if (success) {
@@ -125,6 +129,8 @@ export default function AddPetModal({ isOpen, onClose, onSubmit, mutating, mutat
             className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
           />
         </FormField>
+
+        <PetVideoField idPrefix="add-pet" file={video} onFileChange={setVideo} uploading={mutating && !!video} disabled={mutating} />
       </form>
     </Modal>
   );

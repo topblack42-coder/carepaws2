@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
@@ -9,6 +9,7 @@ import { useAuth } from "../../context/AuthContext";
 import StateView from "../../components/StateView";
 import StatusBadge from "../../components/StatusBadge";
 import PrimaryButton from "../../components/PrimaryButton";
+import PetVideoPlayer, { type PetVideoInfo } from "../../components/PetVideoPlayer";
 import colors from "../../utils/colors";
 
 interface PetDetail {
@@ -25,6 +26,7 @@ interface PetDetail {
   description?: string;
   status: string;
   imageUrl?: string | null;
+  video?: PetVideoInfo | null;
 }
 
 export default function PetDetailScreen() {
@@ -36,8 +38,14 @@ export default function PetDetailScreen() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [togglingFavorite, setTogglingFavorite] = useState(false);
 
+  // Responses can arrive out of order when moving between pets; only the
+  // most recent request may update the screen, so one pet's data (and
+  // video) can never appear on another pet's page.
+  const requestRef = useRef(0);
+
   const load = useCallback(async () => {
     if (!id) return;
+    const request = ++requestRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -45,12 +53,14 @@ export default function PetDetailScreen() {
         api.get(`/api/pets/${id}`),
         user ? api.get("/api/auth/favorites") : Promise.resolve({ data: { data: [] } }),
       ]);
+      if (request !== requestRef.current) return;
       setPet(petRes.data.data);
       setIsFavorite(favoritesRes.data.data.some((favPet: { _id: string }) => favPet._id === id));
     } catch (err) {
+      if (request !== requestRef.current) return;
       setError(getApiErrorMessage(err, "Failed to load this pet"));
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   }, [id, user]);
 
@@ -129,6 +139,8 @@ export default function PetDetailScreen() {
               </View>
             ))}
           </View>
+
+          {pet.video && pet._id === id && <PetVideoPlayer key={`${pet._id}:${pet.video.url}`} petName={pet.name} video={pet.video} />}
 
           {pet.healthStatus && (
             <View className="mb-4 rounded-xl bg-mintBg px-4 py-3">

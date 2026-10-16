@@ -4,22 +4,26 @@ import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { FormField, Input, Select } from "../ui/FormUI";
 import TextArea from "../ui/TextArea";
+import PetVideoField from "./PetVideoField";
 import type { Pet } from "../../hooks/usePets";
 
 interface EditPetModalProps {
   pet: Pet | null;
   onClose: () => void;
   onSubmit: (id: string, formData: FormData) => Promise<boolean>;
+  onRemoveVideo?: (id: string) => Promise<boolean>;
   mutating: boolean;
   mutationError: string | null;
 }
 
-export default function EditPetModal({ pet, onClose, onSubmit, mutating, mutationError }: EditPetModalProps) {
+export default function EditPetModal({ pet, onClose, onSubmit, onRemoveVideo, mutating, mutationError }: EditPetModalProps) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState("Available");
   const [description, setDescription] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [video, setVideo] = useState<File | null>(null);
+  const [videoRemoved, setVideoRemoved] = useState(false);
 
   useEffect(() => {
     if (pet) {
@@ -28,6 +32,8 @@ export default function EditPetModal({ pet, onClose, onSubmit, mutating, mutatio
       setDescription(pet.description ?? "");
       setHealthStatus(pet.healthStatus ?? "");
       setImage(null);
+      setVideo(null);
+      setVideoRemoved(false);
     }
   }, [pet]);
 
@@ -43,6 +49,8 @@ export default function EditPetModal({ pet, onClose, onSubmit, mutating, mutatio
     formData.append("description", description);
     formData.append("healthStatus", healthStatus);
     if (image) formData.append("image", image);
+    // Only sent when the admin picked a new video; leaving it out keeps the current one.
+    if (video) formData.append("video", video);
 
     const success = await onSubmit(pet._id, formData);
     if (success) onClose();
@@ -101,6 +109,23 @@ export default function EditPetModal({ pet, onClose, onSubmit, mutating, mutatio
             className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
           />
         </FormField>
+
+        <PetVideoField
+          idPrefix="edit-pet"
+          file={video}
+          onFileChange={setVideo}
+          existingVideo={videoRemoved ? null : pet.video}
+          onRemoveExisting={
+            onRemoveVideo
+              ? async () => {
+                  if (await onRemoveVideo(pet._id)) setVideoRemoved(true);
+                }
+              : undefined
+          }
+          removing={mutating}
+          uploading={mutating && !!video}
+          disabled={mutating}
+        />
       </form>
     </Modal>
   );

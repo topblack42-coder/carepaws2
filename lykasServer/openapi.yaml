@@ -62,6 +62,23 @@ components:
         energyLevel: { type: string, enum: [Low, Medium, High] }
         status: { type: string, enum: [Available, Pending, Adopted, Foster] }
         imageUrl: { type: string }
+        video:
+          nullable: true
+          description: Optional introduction video. Always present; null when the pet has none.
+          allOf:
+            - $ref: "#/components/schemas/PetVideo"
+    PetVideo:
+      type: object
+      properties:
+        url: { type: string, description: HTTPS delivery URL (MP4) }
+        thumbnailUrl: { type: string, nullable: true, description: First-frame JPEG }
+        publicId: { type: string }
+        duration: { type: number, nullable: true, description: Seconds }
+        mimeType: { type: string, example: video/mp4 }
+        size: { type: number, nullable: true, description: Bytes }
+        width: { type: number, nullable: true }
+        height: { type: number, nullable: true }
+        uploadedAt: { type: string, format: date-time }
     User:
       type: object
       properties:
@@ -180,7 +197,7 @@ paths:
                     items: { $ref: "#/components/schemas/Pet" }
                   pagination: { $ref: "#/components/schemas/Pagination" }
     post:
-      summary: Create a pet (staff/admin/super_admin, multipart image upload)
+      summary: Create a pet (staff/admin/super_admin, multipart; image and video are both optional)
       requestBody:
         required: true
         content:
@@ -189,16 +206,25 @@ paths:
               type: object
               properties:
                 image: { type: string, format: binary }
+                video:
+                  type: string
+                  format: binary
+                  description: Optional MP4 (H.264). Defaults - 25 MB, 60 s (PET_VIDEO_MAX_SIZE_MB / PET_VIDEO_MAX_DURATION_SECONDS).
                 name: { type: string }
                 species: { type: string, enum: [Dog, Cat, Other] }
       responses:
-        "201": { description: Pet created }
-        "400": { description: Validation failed }
+        "201": { description: Pet created (video is null when none was sent) }
+        "400": { description: Validation failed or unexpected upload field }
         "403": { description: Insufficient role }
+        "413": { description: Video (or image) over the size limit }
+        "415": { description: Not a valid MP4 / unsupported media type }
+        "422": { description: Video too long, unsupported codec, or could not be processed }
+        "502": { description: Video storage unavailable - retry }
+        "504": { description: Video upload timed out - retry }
 
   /api/pets/{id}:
     get:
-      summary: Get a single pet
+      summary: Get a single pet (includes `video`, or null)
       security: []
       parameters:
         - in: path
@@ -208,6 +234,43 @@ paths:
       responses:
         "200": { description: Pet }
         "404": { description: Not found }
+    put:
+      summary: Update a pet (staff). Sending a `video` file adds or replaces the video; omitting it leaves the current video untouched.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image: { type: string, format: binary }
+                video: { type: string, format: binary }
+      responses:
+        "200": { description: Updated pet. The old video file is deleted only after the new one is saved. }
+        "404": { description: Not found }
+        "413": { description: File over the size limit }
+        "415": { description: Not a valid MP4 / unsupported media type }
+        "422": { description: Video too long, unsupported codec, or could not be processed }
+        "502": { description: Video storage unavailable - existing video is kept }
+
+  /api/pets/{id}/video:
+    delete:
+      summary: Remove a pet's video (staff). Explicit and idempotent; the pet, photo and all other data are untouched.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: Pet with video null }
+        "400": { description: Malformed id }
+        "403": { description: Insufficient role }
+        "404": { description: Pet not found }
 
   /api/applications:
     post:

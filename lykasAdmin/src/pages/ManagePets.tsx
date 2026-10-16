@@ -110,6 +110,11 @@ export default function ManagePets() {
           if (ok) showToast("Pet updated", "success");
           return ok;
         }}
+        onRemoveVideo={async (id) => {
+          const ok = await pets.removePetVideo(id);
+          if (ok) showToast("Video removed", "success");
+          return ok;
+        }}
         mutating={pets.mutating}
         mutationError={pets.mutationError}
       />

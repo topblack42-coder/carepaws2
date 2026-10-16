@@ -2,6 +2,17 @@ import { useCallback, useState } from "react";
 import { api, getApiErrorMessage } from "../services/api";
 import { useResourceList } from "./useResourceList";
 
+export interface PetVideo {
+  url: string;
+  thumbnailUrl?: string | null;
+  publicId?: string;
+  duration?: number | null;
+  mimeType?: string;
+  size?: number | null;
+  width?: number | null;
+  height?: number | null;
+}
+
 export interface Pet {
   _id: string;
   name: string;
@@ -14,6 +25,8 @@ export interface Pet {
   energyLevel?: "Low" | "Medium" | "High";
   status: "Available" | "Pending" | "Adopted" | "Foster";
   imageUrl?: string | null;
+  /** Optional introduction video; null/absent when the pet has none. */
+  video?: PetVideo | null;
   shelterId?: string | null;
   healthStatus?: string;
   description?: string;
@@ -71,6 +84,26 @@ export function usePets() {
     [list]
   );
 
+  // Removing a video is its own explicit call — editing other fields never
+  // touches it, and this never touches anything but the video.
+  const removePetVideo = useCallback(
+    async (id: string) => {
+      setMutating(true);
+      setMutationError(null);
+      try {
+        await api.delete(`/api/pets/${id}/video`);
+        list.reload();
+        return true;
+      } catch (err) {
+        setMutationError(getApiErrorMessage(err, "Failed to remove video"));
+        return false;
+      } finally {
+        setMutating(false);
+      }
+    },
+    [list]
+  );
+
   const deletePet = useCallback(
     async (id: string) => {
       setMutating(true);
@@ -106,5 +139,5 @@ export function usePets() {
     [list]
   );
 
-  return { ...list, createPet, updatePet, deletePet, restorePet, mutating, mutationError };
+  return { ...list, createPet, updatePet, removePetVideo, deletePet, restorePet, mutating, mutationError };
 }

@@ -3,6 +3,7 @@ const Pet = require("../models/Pet");
 const { buildListQuery, buildSort, buildPagination } = require("../utils/queryBuilder");
 const { writeAuditLog } = require("../utils/auditLogger");
 const { assertShelterAssignmentAllowed } = require("../utils/shelterOccupancy");
+const { VideoUploadError, uploadPetVideo, destroyVideo, releaseVideoAsset } = require("../utils/petVideoService");
 
 const SEARCH_FIELDS = ["name", "breed", "description"];
 const FILTER_FIELDS = ["status", "species", "gender", "size", "temperament", "energyLevel"];
@@ -15,6 +16,19 @@ function uploadBufferToCloudinary(buffer, folder) {
     });
     stream.end(buffer);
   });
+}
+
+// multer .fields() puts files under req.files.{image,video}; each is optional.
+function getUploadedFiles(req) {
+  const files = req.files || {};
+  return { imageFile: files.image && files.image[0], videoFile: files.video && files.video[0] };
+}
+
+// Video problems (too long, wrong codec, storage down...) are the admin's
+// to fix or retry, so they get their real status and message rather than
+// the generic 500 the central error handler would mask them with.
+function sendVideoError(err, res) {
+  return res.status(err.statusCode).json({ success: false, message: err.message });
 }
 
 // GET /api/pets — public list
@@ -66,18 +80,23 @@ async function getPet(req, res, next) {
   }
 }
 
-// POST /api/pets — admin, multipart image upload
+// POST /api/pets — admin, multipart: optional `image` and optional `video`
 async function createPet(req, res, next) {
+  let video = null;
+  let pet = null;
   try {
     let imageUrl = null;
+    const { imageFile, videoFile } = getUploadedFiles(req);
     if (req.body.shelterId) await assertShelterAssignmentAllowed(req.body.shelterId);
 
-    if (req.file) {
-      const result = await uploadBufferToCloudinary(req.file.buffer, "carepaws/pets");
+    if (videoFile) video = await uploadPetVideo(videoFile);
+
+    if (imageFile) {
+      const result = await uploadBufferToCloudinary(imageFile.buffer, "carepaws/pets");
       imageUrl = result.secure_url;
     }
 
-    const pet = await Pet.create({ ...req.body, imageUrl });
+    pet = await Pet.create({ ...req.body, imageUrl, video });
 
     await writeAuditLog({
       actor: req.user._id,
@@ -90,6 +109,9 @@ async function createPet(req, res, next) {
 
     return res.status(201).json({ success: true, data: pet });
   } catch (err) {
+    // Don't leave an orphaned upload behind if the pet was never created.
+    if (video && !pet) await destroyVideo(video.publicId);
+    if (err instanceof VideoUploadError) return sendVideoError(err, res);
     next(err);
   }
 }
@@ -126,13 +148,32 @@ async function updatePet(req, res, next) {
       await assertShelterAssignmentAllowed(nextShelterId, pet._id);
     }
 
-    if (req.file) {
-      const result = await uploadBufferToCloudinary(req.file.buffer, "carepaws/pets");
-      pet.imageUrl = result.secure_url;
+    // The existing video is only touched when a new one is uploaded here
+    // or removed via DELETE /api/pets/:id/video — omitting `video` from an
+    // ordinary edit leaves it exactly as it was.
+    const { imageFile, videoFile } = getUploadedFiles(req);
+    const previousVideo = pet.video ? { ...pet.video.toObject() } : null;
+    let newVideo = null;
+    let saved = false;
+    try {
+      if (videoFile) newVideo = await uploadPetVideo(videoFile);
+
+      if (imageFile) {
+        const result = await uploadBufferToCloudinary(imageFile.buffer, "carepaws/pets");
+        pet.imageUrl = result.secure_url;
+      }
+
+      Object.assign(pet, req.body);
+      if (newVideo) pet.video = newVideo;
+      await pet.save();
+      saved = true;
+    } finally {
+      // Upload or save failed: drop the new file; the old video is untouched.
+      if (newVideo && !saved) await destroyVideo(newVideo.publicId);
     }
 
-    Object.assign(pet, req.body);
-    await pet.save();
+    // Only after the pet points at the new video is the old file released.
+    if (newVideo && previousVideo) await releaseVideoAsset(previousVideo);
 
     await writeAuditLog({
       actor: req.user._id,
@@ -141,6 +182,38 @@ async function updatePet(req, res, next) {
       entityId: pet._id,
       previousValues,
       newValues: pet.toObject(),
+      req,
+    });
+
+    return res.json({ success: true, data: pet });
+  } catch (err) {
+    if (err instanceof VideoUploadError) return sendVideoError(err, res);
+    next(err);
+  }
+}
+
+// DELETE /api/pets/:id/video — explicit removal; the pet, its photo and all
+// other data are left untouched. Idempotent: a pet with no video returns 200.
+async function removePetVideo(req, res, next) {
+  try {
+    const pet = await Pet.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    if (!pet) return res.status(404).json({ success: false, message: "Pet not found" });
+
+    if (!pet.video) return res.json({ success: true, data: pet });
+
+    const previousVideo = { ...pet.video.toObject() };
+    pet.video = null;
+    await pet.save();
+
+    await releaseVideoAsset(previousVideo);
+
+    await writeAuditLog({
+      actor: req.user._id,
+      action: "pet.video.remove",
+      entityType: "Pet",
+      entityId: pet._id,
+      previousValues: { video: previousVideo },
+      newValues: { video: null },
       req,
     });
 
@@ -194,6 +267,8 @@ async function permanentlyDeletePet(req, res, next) {
     const pet = await Pet.findByIdAndDelete(req.params.id);
     if (!pet) return res.status(404).json({ success: false, message: "Pet not found" });
 
+    if (pet.video) await releaseVideoAsset(pet.video);
+
     await writeAuditLog({ actor: req.user._id, action: "pet.permanent_delete", entityType: "Pet", entityId: pet._id, req });
 
     return res.json({ success: true, message: "Pet permanently deleted" });
@@ -218,6 +293,7 @@ module.exports = {
   getPet,
   createPet,
   updatePet,
+  removePetVideo,
   deletePet,
   restorePet,
   permanentlyDeletePet,

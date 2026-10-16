@@ -10,6 +10,7 @@ import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
 import { Input, Select, FormField } from "../components/ui/FormUI";
 import TextArea from "../components/ui/TextArea";
+import PetVideoField from "../components/pets/PetVideoField";
 import { useToast } from "../context/ToastContext";
 
 interface ShelterCareSummary {
@@ -49,6 +50,8 @@ export default function PetManagement() {
   const [shelters, setShelters] = useState<{ _id: string; name: string; status: string; capacity: number; currentOccupancy: number }[]>([]);
   const [healthStatus, setHealthStatus] = useState("");
   const [description, setDescription] = useState("");
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [removingVideo, setRemovingVideo] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -68,6 +71,7 @@ export default function PetManagement() {
       setShelterId(pet.shelterId ?? "");
       setHealthStatus(pet.healthStatus ?? "");
       setDescription(pet.description ?? "");
+      setVideoFile(null);
       setCareSummary(careRes.data.data);
       setMedicalSummary(medicalRes.data.data);
     } catch (err) {
@@ -100,6 +104,8 @@ export default function PetManagement() {
       formData.append("shelterId", shelterId);
       formData.append("healthStatus", healthStatus);
       formData.append("description", description);
+      // Only sent when a new video was chosen; omitting it keeps the current one.
+      if (videoFile) formData.append("video", videoFile);
       // Don't set Content-Type manually — axios needs to compute it
       // (including the multipart boundary) from the FormData instance.
       await api.put(`/api/pets/${selectedPet._id}`, formData);
@@ -110,6 +116,22 @@ export default function PetManagement() {
       setSaveError(getApiErrorMessage(err, "Failed to save changes"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleRemoveVideo() {
+    if (!selectedPet) return;
+    setRemovingVideo(true);
+    setSaveError(null);
+    try {
+      await api.delete(`/api/pets/${selectedPet._id}/video`);
+      showToast("Video removed", "success");
+      await loadDetail(selectedPet._id);
+      pets.reload();
+    } catch (err) {
+      setSaveError(getApiErrorMessage(err, "Failed to remove video"));
+    } finally {
+      setRemovingVideo(false);
     }
   }
 
@@ -217,6 +239,17 @@ export default function PetManagement() {
                 <FormField label="Description" htmlFor="pm-description">
                   <TextArea id="pm-description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
                 </FormField>
+
+                <PetVideoField
+                  idPrefix="pm"
+                  file={videoFile}
+                  onFileChange={setVideoFile}
+                  existingVideo={selectedPet.video}
+                  onRemoveExisting={handleRemoveVideo}
+                  removing={removingVideo}
+                  uploading={saving && !!videoFile}
+                  disabled={saving || removingVideo}
+                />
 
                 <div className="flex justify-end">
                   <Button onClick={handleSave} loading={saving}>
