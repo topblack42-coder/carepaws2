@@ -3,13 +3,13 @@ import { useState } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import { getApiErrorMessage } from "../../utils/api";
 import PrimaryButton from "../../components/PrimaryButton";
 import FormInput from "../../components/FormInput";
 import colors from "../../utils/colors";
+import { getGoogleIdToken } from "../../utils/googleAuth";
 
 export default function SignUpScreen() {
   const { register, loginWithGoogle, markJustRegistered } = useAuth();
@@ -52,10 +52,8 @@ export default function SignUpScreen() {
     setError(null);
     setGoogleLoading(true);
     try {
-      await GoogleSignin.hasPlayServices();
-      const result = await GoogleSignin.signIn();
-      const idToken = result.data?.idToken;
-      if (!idToken) throw new Error("Google sign-in didn't return a token");
+      const idToken = await getGoogleIdToken();
+      if (!idToken) return;
       // loginWithGoogle() is shared with the login screen, so it can't set
       // justRegistered itself — mark it here, from the screen that knows
       // this call means "sign up," before the shared context method runs.

@@ -3,18 +3,13 @@ import { useState } from "react";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { Link, router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import { getApiErrorMessage, tokenStore } from "../../utils/api";
 import PrimaryButton from "../../components/PrimaryButton";
 import FormInput from "../../components/FormInput";
 import colors from "../../utils/colors";
-
-GoogleSignin.configure({
-  webClientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
-  iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
-});
+import { getGoogleIdToken } from "../../utils/googleAuth";
 
 export default function LogInScreen() {
   const { login, loginWithGoogle } = useAuth();
@@ -49,10 +44,8 @@ export default function LogInScreen() {
     setError(null);
     setGoogleLoading(true);
     try {
-      await GoogleSignin.hasPlayServices();
-      const result = await GoogleSignin.signIn();
-      const idToken = result.data?.idToken;
-      if (!idToken) throw new Error("Google sign-in didn't return a token");
+      const idToken = await getGoogleIdToken();
+      if (!idToken) return;
       await loginWithGoogle(idToken);
 
       const rt = await tokenStore.getRefreshToken();
