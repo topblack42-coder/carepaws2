@@ -1,20 +1,39 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View, Text, ScrollView, Pressable, Linking, Alert } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../utils/api";
 import FormInput from "../components/FormInput";
 import PrimaryButton from "../components/PrimaryButton";
 import colors from "../utils/colors";
+import { parseAmountParam } from "../utils/donation";
 
 const PRESET_AMOUNTS = [100, 250, 500, 1000]; // PHP
 
+const DEFAULT_AMOUNT = 250;
+
 export default function DonateScreen() {
-  const [amount, setAmount] = useState<number | null>(250);
-  const [customAmount, setCustomAmount] = useState("");
+  const { amount: amountParam } = useLocalSearchParams<{ amount?: string }>();
+  const initial = parseAmountParam(amountParam) ?? DEFAULT_AMOUNT;
+  const isPreset = PRESET_AMOUNTS.includes(initial);
+  const [amount, setAmount] = useState<number | null>(isPreset ? initial : null);
+  const [customAmount, setCustomAmount] = useState(isPreset ? "" : String(initial));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Re-apply when the screen is reused with a different `amount` param.
+  useEffect(() => {
+    const next = parseAmountParam(amountParam);
+    if (next === null) return;
+    if (PRESET_AMOUNTS.includes(next)) {
+      setAmount(next);
+      setCustomAmount("");
+    } else {
+      setAmount(null);
+      setCustomAmount(String(next));
+    }
+  }, [amountParam]);
 
   const effectiveAmount = customAmount ? Number(customAmount) : amount;
 

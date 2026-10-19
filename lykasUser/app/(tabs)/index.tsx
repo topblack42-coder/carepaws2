@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import { View, Text, ScrollView, RefreshControl, FlatList } from "react-native";
-import { router } from "expo-router";
+import { View, Text, ScrollView, RefreshControl, FlatList, Pressable } from "react-native";
+import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../../utils/api";
 import { useAuth } from "../../context/AuthContext";
+import { fetchMyApplications, type ApplicationSummary } from "../../utils/applications";
 import PetCard, { type PetSummary } from "../../components/PetCard";
 import StateView from "../../components/StateView";
+import ApplicationsSection from "../../components/ApplicationsSection";
+import DonationCard from "../../components/DonationCard";
 import colors from "../../utils/colors";
 
 interface Announcement {
@@ -19,39 +22,79 @@ interface Announcement {
 export default function HomeScreen() {
   const { user } = useAuth();
   const [pets, setPets] = useState<PetSummary[]>([]);
+  const [petsLoading, setPetsLoading] = useState(true);
+  const [petsError, setPetsError] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [applications, setApplications] = useState<ApplicationSummary[]>([]);
+  const [appsLoading, setAppsLoading] = useState(true);
+  const [appsError, setAppsError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
+  const loadPets = useCallback(async () => {
+    setPetsError(null);
     try {
-      const [petsRes, announcementsRes] = await Promise.all([
-        api.get("/api/pets", { params: { limit: 6, status: "Available" } }),
-        api.get("/api/announcements/active"),
-      ]);
-      setPets(petsRes.data.data);
-      setAnnouncements(announcementsRes.data.data);
+      const res = await api.get("/api/pets", { params: { limit: 6, status: "Available" } });
+      setPets(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load your feed"));
+      setPetsError(getApiErrorMessage(err, "Failed to load pets"));
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setPetsLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      const res = await api.get("/api/announcements/active");
+      setAnnouncements(res.data.data);
+    } catch {
+      // Announcements are optional; a failure must not affect the rest of Home.
+    }
+  }, []);
 
-  if (loading) return <StateView state="loading" />;
+  const loadApplications = useCallback(async () => {
+    setAppsError(null);
+    try {
+      setApplications(await fetchMyApplications());
+    } catch (err) {
+      setAppsError(getApiErrorMessage(err, "Failed to load your applications"));
+    } finally {
+      setAppsLoading(false);
+    }
+  }, []);
+
+  const retryApplications = useCallback(() => {
+    setAppsLoading(true);
+    loadApplications();
+  }, [loadApplications]);
+
+  const retryPets = useCallback(() => {
+    setPetsLoading(true);
+    loadPets();
+  }, [loadPets]);
+
+  useEffect(() => {
+    // Each loader catches its own errors, so allSettled keeps sections independent.
+    Promise.allSettled([loadPets(), loadAnnouncements()]);
+  }, [loadPets, loadAnnouncements]);
+
+  // Keep application status fresh when returning from detail/apply screens.
+  useFocusEffect(
+    useCallback(() => {
+      loadApplications();
+    }, [loadApplications])
+  );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.allSettled([loadPets(), loadAnnouncements(), loadApplications()]);
+    setRefreshing(false);
+  }, [loadPets, loadAnnouncements, loadApplications]);
 
   return (
     <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
       <ScrollView
-        contentContainerClassName="px-5 pb-8 pt-2"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+        contentContainerClassName="px-5 pb-10 pt-2"
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
       >
         <View className="mb-6 flex-row items-center justify-between">
           <View>
@@ -60,8 +103,6 @@ export default function HomeScreen() {
           </View>
           <Ionicons name="paw" size={28} color={colors.primary} />
         </View>
-
-        {error && <StateView state="error" message={error} onRetry={load} />}
 
         {announcements.map((a) => (
           <View
@@ -75,28 +116,50 @@ export default function HomeScreen() {
           </View>
         ))}
 
-        <View className="mb-3 mt-2 flex-row items-center justify-between">
+        <ApplicationsSection applications={applications} loading={appsLoading} error={appsError} onRetry={retryApplications} />
+
+        <View className="mb-3 flex-row items-center justify-between">
           <Text className="font-display text-lg text-ink">Pets looking for a home</Text>
-          <Text onPress={() => router.push("/(tabs)/adopt")} className="font-sans-medium text-sm text-primary">
-            See all
-          </Text>
+          <Pressable
+            onPress={() => router.push("/(tabs)/adopt")}
+            accessibilityRole="link"
+            accessibilityLabel="See all pets"
+            className="min-h-[44px] justify-center pl-3 active:opacity-60"
+          >
+            <Text className="font-sans-medium text-sm text-primary">See all</Text>
+          </Pressable>
         </View>
 
-        {pets.length === 0 ? (
-          <StateView state="empty" title="No pets available right now" message="Check back soon — new pets are added regularly." />
-        ) : (
-          <FlatList
-            horizontal
-            data={pets}
-            keyExtractor={(p) => p._id}
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <View style={{ width: 160, marginRight: 12 }}>
-                <PetCard pet={item} onPress={() => router.push(`/pets/${item._id}`)} />
-              </View>
-            )}
-          />
-        )}
+        <View className="mb-6">
+          {petsLoading ? (
+            <View className="flex-row gap-3" testID="pets-skeleton">
+              {[0, 1].map((i) => (
+                <View key={i} className="h-[240px] w-[160px] rounded-2xl border border-border bg-cardBg" />
+              ))}
+            </View>
+          ) : petsError ? (
+            <View className="rounded-2xl border border-border bg-white">
+              <StateView state="error" title="Couldn't load pets" message={petsError} onRetry={retryPets} />
+            </View>
+          ) : pets.length === 0 ? (
+            <StateView state="empty" title="No pets available right now" message="Check back soon — new pets are added regularly." />
+          ) : (
+            <FlatList
+              horizontal
+              data={pets}
+              keyExtractor={(p) => p._id}
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <View style={{ width: 160, marginRight: 12 }}>
+                  <PetCard pet={item} onPress={() => router.push(`/pets/${item._id}`)} />
+                </View>
+              )}
+            />
+          )}
+        </View>
+
+        <Text className="mb-3 font-display text-lg text-ink">Ways to help</Text>
+        <DonationCard />
       </ScrollView>
     </SafeAreaView>
   );

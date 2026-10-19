@@ -8,8 +8,8 @@ import { formatDateTime, titleCase } from "../../utils/format";
 import StateView from "../../components/StateView";
 import StatusBadge from "../../components/StatusBadge";
 import colors from "../../utils/colors";
+import { STAGE_ORDER } from "../../utils/applications";
 
-const STAGE_ORDER = ["submitted", "document_review", "interview", "home_visit", "risk_assessment", "approved", "adoption_scheduled", "completed"];
 
 interface StageHistoryEntry {
   stage: string;

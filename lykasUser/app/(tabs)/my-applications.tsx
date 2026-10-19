@@ -4,20 +4,12 @@ import { View, Text, FlatList, Pressable } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { api, getApiErrorMessage } from "../../utils/api";
+import { getApiErrorMessage } from "../../utils/api";
 import { formatDate, titleCase } from "../../utils/format";
 import StateView from "../../components/StateView";
 import StatusBadge from "../../components/StatusBadge";
 import colors from "../../utils/colors";
-
-interface ApplicationSummary {
-  _id: string;
-  pet: { name: string; imageUrl?: string };
-  type: "adoption" | "foster";
-  status: string;
-  stage: string;
-  createdAt: string;
-}
+import { fetchMyApplications, type ApplicationSummary } from "../../utils/applications";
 
 export default function MyApplicationsScreen() {
   const [applications, setApplications] = useState<ApplicationSummary[]>([]);
@@ -28,8 +20,7 @@ export default function MyApplicationsScreen() {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get("/api/applications/my");
-      setApplications(res.data.data);
+      setApplications(await fetchMyApplications());
     } catch (err) {
       setError(getApiErrorMessage(err, "Failed to load your applications"));
     } finally {
