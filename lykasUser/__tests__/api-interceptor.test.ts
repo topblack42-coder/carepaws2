@@ -1,7 +1,7 @@
 import type { AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import axios, { AxiosError } from "axios";
 import * as SecureStore from "expo-secure-store";
-import { api, tokenStore, setSessionExpiredHandler } from "../utils/api";
+import { api, tokenStore, setSessionExpiredHandler, setEmailNotVerifiedHandler } from "../utils/api";
 
 /**
  * A minimal custom axios adapter so these tests exercise the real
@@ -214,5 +214,32 @@ describe("api response interceptor — network failures during refresh don't for
 
     expect(clearSpy).toHaveBeenCalled();
     expect(sessionExpired).toHaveBeenCalled();
+  });
+});
+
+describe("api response interceptor — 403 EMAIL_NOT_VERIFIED", () => {
+  afterEach(() => setEmailNotVerifiedHandler(null));
+
+  it("calls the email-not-verified handler and still rejects with the original error", async () => {
+    const adapter = makeAdapter(() => ({
+      status: 403,
+      data: { success: false, code: "EMAIL_NOT_VERIFIED", message: "Please verify your email to continue" },
+    }));
+    const handler = jest.fn();
+    setEmailNotVerifiedHandler(handler);
+
+    await expect(api.post("/api/applications", {}, { adapter })).rejects.toMatchObject({ response: { status: 403 } });
+
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores other 403s", async () => {
+    const adapter = makeAdapter(() => ({ status: 403, data: { success: false, message: "Insufficient role" } }));
+    const handler = jest.fn();
+    setEmailNotVerifiedHandler(handler);
+
+    await expect(api.post("/api/applications", {}, { adapter })).rejects.toMatchObject({ response: { status: 403 } });
+
+    expect(handler).not.toHaveBeenCalled();
   });
 });

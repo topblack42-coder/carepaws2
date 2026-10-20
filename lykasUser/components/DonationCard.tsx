@@ -2,9 +2,9 @@ import { View, Text, Pressable } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import colors from "../utils/colors";
-import { DONATION_IMPACT_LINE, DONATION_MESSAGE, QUICK_DONATION_AMOUNTS } from "../utils/donation";
+import { DONATION_IMPACT_LINE, DONATION_MESSAGE } from "../utils/donation";
 
-/** "Ways to help" card: cash/goods actions, quick-amount chips and an impact line. */
+/** "Ways to help" card: cash/goods actions and an impact line. */
 export default function DonationCard() {
   return (
     <View className="mb-2 overflow-hidden rounded-2xl border border-border bg-mintBg">
@@ -41,22 +41,6 @@ export default function DonationCard() {
           </Pressable>
         </View>
         <Text className="text-center font-sans text-xs text-muted">Goods: food, blankets, medicine</Text>
-
-        <View className="flex-row gap-2">
-          {QUICK_DONATION_AMOUNTS.map((amt) => (
-            <Pressable
-              key={amt}
-              onPress={() => router.push({ pathname: "/donate", params: { amount: String(amt) } })}
-              accessibilityRole="button"
-              accessibilityLabel={`Donate ${amt.toLocaleString("en-PH")} pesos`}
-              className="min-h-[44px] flex-1 items-center justify-center rounded-xl border border-border bg-white active:opacity-70"
-            >
-              <Text className="font-sans-bold text-sm text-ink" numberOfLines={1} adjustsFontSizeToFit>
-                ₱{amt.toLocaleString("en-PH")}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
 
         <View className="flex-row items-center justify-center gap-1.5">
           <Ionicons name="paw" size={14} color={colors.primary} />

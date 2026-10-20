@@ -6,6 +6,8 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
 export interface ApiErrorShape {
   success: false;
   message: string;
+  /** Machine-readable code, e.g. "EMAIL_NOT_VERIFIED". */
+  code?: string;
   errors?: { field: string; message: string }[];
   requestId?: string;
 }
@@ -65,6 +67,13 @@ export function setSessionExpiredHandler(handler: () => void) {
   onSessionExpired = handler;
 }
 
+let onEmailNotVerified: (() => void) | null = null;
+
+/** Wired once from AuthProvider so a 403 EMAIL_NOT_VERIFIED shows a friendly prompt instead of a raw error. */
+export function setEmailNotVerifiedHandler(handler: (() => void) | null) {
+  onEmailNotVerified = handler;
+}
+
 async function refreshAccessToken(): Promise<RefreshResult> {
   const refreshToken = await tokenStore.getRefreshToken();
   if (!refreshToken) {
@@ -100,6 +109,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError<ApiErrorShape>) => {
     const original = error.config as InternalAxiosRequestConfig & { _retried?: boolean };
+
+    if (error.response?.status === 403 && error.response.data?.code === "EMAIL_NOT_VERIFIED") {
+      onEmailNotVerified?.();
+    }
 
     if (
       error.response?.status === 401 &&

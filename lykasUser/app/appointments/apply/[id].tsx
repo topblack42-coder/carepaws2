@@ -4,12 +4,15 @@ import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../../../utils/api";
+import { useAuth } from "../../../context/AuthContext";
+import { isEmailNotVerifiedError, needsEmailVerification, promptVerifyEmail } from "../../../utils/emailVerification";
 import FormInput from "../../../components/FormInput";
 import PrimaryButton from "../../../components/PrimaryButton";
 import colors from "../../../utils/colors";
 
 export default function ApplyToAppointmentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { user } = useAuth();
   const [phone, setPhone] = useState("");
   const [emergencyContact, setEmergencyContact] = useState("");
   const [notes, setNotes] = useState("");
@@ -21,13 +24,18 @@ export default function ApplyToAppointmentScreen() {
       setError("Phone number is required.");
       return;
     }
+    if (needsEmailVerification(user)) {
+      promptVerifyEmail();
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
       await api.post(`/api/appointments/${id}/enroll`, { phone, emergencyContact, notes });
       Alert.alert("You're enrolled", "See you then!", [{ text: "OK", onPress: () => router.replace("/my-appointments") }]);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to enroll in this appointment"));
+      // EMAIL_NOT_VERIFIED is shown as a prompt by the API client; skip the raw banner.
+      if (!isEmailNotVerifiedError(err)) setError(getApiErrorMessage(err, "Failed to enroll in this appointment"));
     } finally {
       setSubmitting(false);
     }

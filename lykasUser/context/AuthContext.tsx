@@ -1,5 +1,7 @@
+import { AppState } from "react-native";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, tokenStore, setSessionExpiredHandler, getResponseStatus } from "../utils/api";
+import { api, tokenStore, setSessionExpiredHandler, setEmailNotVerifiedHandler, getResponseStatus } from "../utils/api";
+import { promptVerifyEmail } from "../utils/emailVerification";
 
 export interface AppUser {
   id: string;
@@ -22,7 +24,8 @@ interface AuthContextValue {
   // See routeGuard.ts for why this replaced signUp.tsx's own
   // router.replace("/onboarding") call.
   justRegistered: boolean;
-  register: (displayName: string, email: string, password: string) => Promise<void>;
+  // emailSent is false when the account was created but the verification email could not be sent.
+  register: (displayName: string, email: string, password: string) => Promise<{ emailSent: boolean }>;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -87,11 +90,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Wired once so a hard session failure (refresh token also expired)
     // can bounce the app back to the auth flow from anywhere.
     setSessionExpiredHandler(() => setUser(null));
+    setEmailNotVerifiedHandler(() => promptVerifyEmail());
   }, [loadMe]);
 
   const register = useCallback(async (displayName: string, email: string, password: string) => {
     const res = await api.post("/api/auth/register", { displayName, email, password });
-    const { user: newUser, accessToken, refreshToken } = res.data.data;
+    const { user: newUser, accessToken, refreshToken, emailSent, emailSkipped } = res.data.data;
 
     // Defensive: require both tokens from the server before committing session
     if (!accessToken || !refreshToken) {
@@ -103,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setJustRegistered(true);
     // Skip the immediate loadMe() call after registration
     setSkipLoadMeOnce(true);
+    return { emailSent: emailSent ?? !emailSkipped };
   }, []);
 
   const markJustRegistered = useCallback(() => setJustRegistered(true), []);
@@ -153,6 +158,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.get("/api/auth/me");
     setUser(res.data.data.user);
   }, []);
+
+  // While the email is unverified, re-check when the app returns to the
+  // foreground (e.g. after tapping the link in a mail app) so the profile
+  // banner clears without a restart.
+  const isUnverified = user?.emailVerified === false;
+  useEffect(() => {
+    if (!isUnverified) return;
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") refreshUser().catch(() => {});
+    });
+    return () => subscription.remove();
+  }, [isUnverified, refreshUser]);
 
   const value = useMemo(
     () => ({

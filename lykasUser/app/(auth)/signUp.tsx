@@ -1,6 +1,6 @@
 // app/(auth)/signUp.tsx
 import { useState } from "react";
-import { View, Text, ScrollView, Pressable } from "react-native";
+import { View, Text, ScrollView, Pressable, Alert } from "react-native";
 import { Link } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,6 +10,7 @@ import PrimaryButton from "../../components/PrimaryButton";
 import FormInput from "../../components/FormInput";
 import colors from "../../utils/colors";
 import { getGoogleIdToken } from "../../utils/googleAuth";
+import { promptVerifyEmail } from "../../utils/emailVerification";
 
 export default function SignUpScreen() {
   const { register, loginWithGoogle, markJustRegistered } = useAuth();
@@ -35,7 +36,18 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      await register(displayName, email, password);
+      const result = await register(displayName, email, password);
+      // The nav guard moves the new user on to onboarding right away, so
+      // these are Alerts (they outlive this screen) rather than inline text.
+      if (result?.emailSent === false) {
+        promptVerifyEmail({
+          title: "Verification email not sent",
+          message:
+            "Your account was created, but we couldn't send the verification email. Tap Resend email to try again, or do it later from Profile.",
+        });
+      } else {
+        Alert.alert("Check your inbox", `We sent a verification link to ${email}. Verify your email to apply for pets and volunteer.`);
+      }
       // No router.replace here: register() sets justRegistered, and the
       // root layout's navigation guard (app/_layout.tsx) is the single
       // place that now decides where a freshly-authenticated user goes —

@@ -54,7 +54,7 @@ export default function FosterDashboardScreen() {
       ) : error ? (
         <StateView state="error" message={error} onRetry={load} />
       ) : fosters.length === 0 ? (
-        <StateView state="empty" title="No active fosters" message="Apply to foster a pet from their profile page." />
+        <StateView state="empty" title="No active fosters" message="Apply to foster a pet from its profile page. Approved placements appear here." />
       ) : (
         <FlatList
           data={fosters}

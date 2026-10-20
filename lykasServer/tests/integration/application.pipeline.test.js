@@ -7,6 +7,7 @@ jest.mock("../../src/middleware/rateLimitMiddleware", () => ({
   loginLimiter: (req, res, next) => next(),
   registerLimiter: (req, res, next) => next(),
   passwordResetLimiter: (req, res, next) => next(),
+  resendVerificationLimiter: (req, res, next) => next(),
   webhookLimiter: (req, res, next) => next(),
 }));
 
@@ -19,6 +20,9 @@ async function registerAndLogin(email, role = "user") {
   const res = await request(app)
     .post("/api/auth/register")
     .send({ displayName: "Test " + role, email, password: "password123" });
+
+  // These suites exercise actions gated by requireVerifiedEmail; verification itself is covered in emailVerification.test.js.
+  await User.findOneAndUpdate({ email }, { emailVerified: true });
 
   if (role !== "user") {
     await User.findOneAndUpdate({ email }, { role });
@@ -81,6 +85,24 @@ describe("Application pipeline: submit -> stage transitions -> approve/reject", 
       .send({ pet: pet._id.toString(), phone: "0917111111", address: "456 Side St" });
 
     expect(res.status).toBe(409);
+  });
+
+  it("uses type-neutral wording when a pet already has an active application", async () => {
+    await request(app)
+      .post("/api/applications")
+      .set("Authorization", `Bearer ${applicantToken}`)
+      .send({ pet: pet._id.toString(), phone: "0917000000", address: "123 Main St" });
+    // Force the pet back to Available so the active-application check (not the availability check) is what rejects.
+    await Pet.updateOne({ _id: pet._id }, { status: "Available" });
+
+    const second = await registerAndLogin("third@example.com", "user");
+    const res = await request(app)
+      .post("/api/applications")
+      .set("Authorization", `Bearer ${second.token}`)
+      .send({ pet: pet._id.toString(), phone: "0917111111", address: "456 Side St", type: "foster", fosterPeriod: "4 weeks" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe("This pet already has an active application");
   });
 
   it("staff can move an application through pipeline stages, recording stageHistory", async () => {

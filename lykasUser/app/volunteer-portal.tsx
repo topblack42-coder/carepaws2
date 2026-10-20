@@ -4,6 +4,8 @@ import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../utils/api";
+import { useAuth } from "../context/AuthContext";
+import { isEmailNotVerifiedError, needsEmailVerification, promptVerifyEmail } from "../utils/emailVerification";
 import FormInput from "../components/FormInput";
 import PrimaryButton from "../components/PrimaryButton";
 import colors from "../utils/colors";
@@ -20,6 +22,7 @@ interface VolunteerProfile {
 }
 
 export default function VolunteerPortalScreen() {
+  const { user } = useAuth();
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
@@ -62,6 +65,11 @@ export default function VolunteerPortalScreen() {
       setError("Phone and address are required.");
       return;
     }
+    // Signing up as a volunteer requires a verified email (updating an existing profile does not).
+    if (!profile && needsEmailVerification(user)) {
+      promptVerifyEmail();
+      return;
+    }
     setError(null);
     setSubmitting(true);
     const payload = {
@@ -83,7 +91,8 @@ export default function VolunteerPortalScreen() {
         Alert.alert("Application submitted", "We'll review your application and get back to you.");
       }
     } catch (err) {
-      setError(getApiErrorMessage(err, profile ? "Failed to update your profile" : "Failed to submit your application"));
+      // EMAIL_NOT_VERIFIED is shown as a prompt by the API client; skip the raw banner.
+      if (!isEmailNotVerifiedError(err)) setError(getApiErrorMessage(err, profile ? "Failed to update your profile" : "Failed to submit your application"));
     } finally {
       setSubmitting(false);
     }

@@ -1,0 +1,387 @@
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasServer/src/controllers/applicationController.js carepaws2-main/lykasServer/src/controllers/applicationController.js
+--- a/lykasServer/src/controllers/applicationController.js	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasServer/src/controllers/applicationController.js	2026-10-20 10:03:58.309209450 +0000
+@@ -159,7 +159,7 @@
+       status: { $in: ["pending", "approved"] },
+     }).select("_id applicant status");
+     if (activeApplication) {
+-      return res.status(409).json({ success: false, message: "This pet already has an active adoption application" });
++      return res.status(409).json({ success: false, message: "This pet already has an active application" });
+     }
+ 
+     const { applicant: _ignoredApplicant, ...applicationFields } = req.body;
+@@ -176,7 +176,7 @@
+     return res.status(201).json({ success: true, data: application });
+   } catch (err) {
+     if (err?.code === 11000 && err?.keyPattern?.pet) {
+-      return res.status(409).json({ success: false, message: "This pet already has an active adoption application" });
++      return res.status(409).json({ success: false, message: "This pet already has an active application" });
+     }
+     next(err);
+   }
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasServer/tests/integration/application.pipeline.test.js carepaws2-main/lykasServer/tests/integration/application.pipeline.test.js
+--- a/lykasServer/tests/integration/application.pipeline.test.js	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasServer/tests/integration/application.pipeline.test.js	2026-10-20 10:04:25.206816227 +0000
+@@ -83,6 +83,24 @@
+     expect(res.status).toBe(409);
+   });
+ 
++  it("uses type-neutral wording when a pet already has an active application", async () => {
++    await request(app)
++      .post("/api/applications")
++      .set("Authorization", `Bearer ${applicantToken}`)
++      .send({ pet: pet._id.toString(), phone: "0917000000", address: "123 Main St" });
++    // Force the pet back to Available so the active-application check (not the availability check) is what rejects.
++    await Pet.updateOne({ _id: pet._id }, { status: "Available" });
++
++    const second = await registerAndLogin("third@example.com", "user");
++    const res = await request(app)
++      .post("/api/applications")
++      .set("Authorization", `Bearer ${second.token}`)
++      .send({ pet: pet._id.toString(), phone: "0917111111", address: "456 Side St", type: "foster", fosterPeriod: "4 weeks" });
++
++    expect(res.status).toBe(409);
++    expect(res.body.message).toBe("This pet already has an active application");
++  });
++
+   it("staff can move an application through pipeline stages, recording stageHistory", async () => {
+     const submitRes = await request(app)
+       .post("/api/applications")
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasUser/__tests__/application-form.test.tsx carepaws2-main/lykasUser/__tests__/application-form.test.tsx
+--- a/lykasUser/__tests__/application-form.test.tsx	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasUser/__tests__/application-form.test.tsx	2026-10-20 10:04:09.146908359 +0000
+@@ -4,9 +4,10 @@
+ 
+ const mockReplace = jest.fn();
+ const mockBack = jest.fn();
++let mockParams: Record<string, string> = { id: "pet1" };
+ 
+ jest.mock("expo-router", () => ({
+-  useLocalSearchParams: () => ({ id: "pet1" }),
++  useLocalSearchParams: () => mockParams,
+   router: { replace: (...args: unknown[]) => mockReplace(...args), back: (...args: unknown[]) => mockBack(...args) },
+ }));
+ 
+@@ -25,6 +26,7 @@
+     jest.mocked(api.post).mockReset();
+     mockReplace.mockReset();
+     mockBack.mockReset();
++    mockParams = { id: "pet1" };
+     jest.spyOn(Alert, "alert").mockImplementation(() => {});
+   });
+ 
+@@ -107,4 +109,90 @@
+     await waitFor(() => expect(screen.getByText("This pet is not currently available")).toBeTruthy());
+     expect(mockReplace).not.toHaveBeenCalled();
+   });
++
++  it("sends no fosterPeriod for an adoption application", async () => {
++    jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
++    render(<ApplyToPetScreen />);
++
++    expect(screen.getByText("Adoption application")).toBeTruthy();
++    expect(screen.queryByTestId("apply-foster-period")).toBeNull();
++
++    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
++    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
++    fireEvent.press(screen.getByTestId("apply-submit"));
++
++    await waitFor(() => expect(api.post).toHaveBeenCalled());
++    const body = jest.mocked(api.post).mock.calls[0][1] as Record<string, unknown>;
++    expect(body.type).toBe("adoption");
++    expect(body).not.toHaveProperty("fosterPeriod");
++  });
++
++  it("falls back to an adoption application for an unknown type param", async () => {
++    mockParams = { id: "pet1", type: "foo" };
++    jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
++    render(<ApplyToPetScreen />);
++
++    expect(screen.getByText("Adoption application")).toBeTruthy();
++    expect(screen.queryByTestId("apply-foster-period")).toBeNull();
++
++    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
++    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
++    fireEvent.press(screen.getByTestId("apply-submit"));
++
++    await waitFor(() => expect(api.post).toHaveBeenCalled());
++    const body = jest.mocked(api.post).mock.calls[0][1] as Record<string, unknown>;
++    expect(body.type).toBe("adoption");
++    expect(body).not.toHaveProperty("fosterPeriod");
++  });
++
++  describe("foster mode (?type=foster)", () => {
++    beforeEach(() => {
++      mockParams = { id: "pet1", type: "foster" };
++    });
++
++    it("renders the foster title, field and labels", () => {
++      render(<ApplyToPetScreen />);
++
++      expect(screen.getByText("Foster application")).toBeTruthy();
++      expect(screen.getByText("How long can you foster?")).toBeTruthy();
++      expect(screen.getByText("Experience caring for pets (foster)")).toBeTruthy();
++      expect(screen.getByTestId("apply-foster-period")).toBeTruthy();
++      expect(screen.getByText("Submit foster application")).toBeTruthy();
++    });
++
++    it("blocks submit without a foster period", async () => {
++      render(<ApplyToPetScreen />);
++
++      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
++      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
++      fireEvent.press(screen.getByTestId("apply-submit"));
++
++      await waitFor(() => expect(screen.getByText("Please tell us how long you can foster.")).toBeTruthy());
++      expect(api.post).not.toHaveBeenCalled();
++    });
++
++    it("posts type foster with fosterPeriod and shows foster success text", async () => {
++      jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
++      render(<ApplyToPetScreen />);
++
++      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
++      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
++      fireEvent.changeText(screen.getByTestId("apply-foster-period"), "4 weeks");
++      fireEvent.press(screen.getByTestId("apply-submit"));
++
++      await waitFor(() =>
++        expect(api.post).toHaveBeenCalledWith(
++          "/api/applications",
++          expect.objectContaining({ pet: "pet1", type: "foster", fosterPeriod: "4 weeks" })
++        )
++      );
++      await waitFor(() =>
++        expect(Alert.alert).toHaveBeenCalledWith(
++          "Application submitted",
++          "We'll be in touch about your foster application.",
++          expect.any(Array)
++        )
++      );
++    });
++  });
+ });
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasUser/__tests__/pet-apply-buttons.test.tsx carepaws2-main/lykasUser/__tests__/pet-apply-buttons.test.tsx
+--- a/lykasUser/__tests__/pet-apply-buttons.test.tsx	1970-01-01 00:00:00.000000000 +0000
++++ b/lykasUser/__tests__/pet-apply-buttons.test.tsx	2026-10-20 10:06:37.597966715 +0000
+@@ -0,0 +1,70 @@
++import { render, screen, fireEvent, waitFor } from "@testing-library/react-native";
++import PetDetailScreen from "../app/pets/[id]";
++
++const mockPush = jest.fn();
++
++jest.mock("expo-router", () => ({
++  useLocalSearchParams: () => ({ id: "pet1" }),
++  router: { push: (...args: unknown[]) => mockPush(...args), replace: jest.fn(), back: jest.fn() },
++}));
++jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
++jest.mock("react-native-safe-area-context", () => {
++  const { View: MockView } = jest.requireActual("react-native");
++  return { SafeAreaView: ({ children }: { children: React.ReactNode }) => <MockView>{children}</MockView> };
++});
++jest.mock("expo-image", () => {
++  const { View: MockView } = jest.requireActual("react-native");
++  return { Image: (props: Record<string, unknown>) => <MockView {...props} /> };
++});
++jest.mock("../components/PetVideoPlayer", () => ({ __esModule: true, default: () => null }));
++jest.mock("../utils/api", () => {
++  const actual = jest.requireActual("../utils/api");
++  return { ...actual, api: { get: jest.fn(), post: jest.fn() } };
++});
++
++import { api } from "../utils/api";
++
++const basePet = { _id: "pet1", name: "Bella", species: "Dog", breed: "Aspin", description: "Sweet girl", imageUrl: null };
++
++function mockPet(status: string) {
++  jest.mocked(api.get).mockImplementation((url: string) => {
++    if (url.startsWith("/api/pets/")) return Promise.resolve({ data: { data: { ...basePet, status } } });
++    return Promise.resolve({ data: { data: [] } });
++  });
++}
++
++describe("Pet details apply buttons", () => {
++  beforeEach(() => {
++    jest.mocked(api.get).mockReset();
++    mockPush.mockReset();
++  });
++
++  it("shows both adopt and foster buttons for an available pet", async () => {
++    mockPet("Available");
++    render(<PetDetailScreen />);
++
++    await waitFor(() => expect(screen.getByText("Apply to adopt Bella")).toBeTruthy());
++    expect(screen.getByText("Apply to foster Bella")).toBeTruthy();
++  });
++
++  it("routes the adopt button without a type and the foster button with type=foster", async () => {
++    mockPet("Available");
++    render(<PetDetailScreen />);
++
++    await waitFor(() => expect(screen.getByText("Apply to adopt Bella")).toBeTruthy());
++    fireEvent.press(screen.getByText("Apply to adopt Bella"));
++    expect(mockPush).toHaveBeenLastCalledWith("/pets/apply/pet1");
++
++    fireEvent.press(screen.getByText("Apply to foster Bella"));
++    expect(mockPush).toHaveBeenLastCalledWith("/pets/apply/pet1?type=foster");
++  });
++
++  it.each(["Pending", "Adopted", "Foster"])("shows neither button when the pet is %s", async (status) => {
++    mockPet(status);
++    render(<PetDetailScreen />);
++
++    await waitFor(() => expect(screen.getByText("About Bella")).toBeTruthy());
++    expect(screen.queryByText("Apply to adopt Bella")).toBeNull();
++    expect(screen.queryByText("Apply to foster Bella")).toBeNull();
++  });
++});
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasUser/app/application-details/[id].tsx carepaws2-main/lykasUser/app/application-details/[id].tsx
+--- a/lykasUser/app/application-details/[id].tsx	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasUser/app/application-details/[id].tsx	2026-10-20 10:03:58.310089572 +0000
+@@ -20,6 +20,7 @@
+ interface ApplicationDetail {
+   _id: string;
+   pet: { name: string; imageUrl?: string };
++  type?: "adoption" | "foster";
+   status: string;
+   stage: string;
+   stageHistory: StageHistoryEntry[];
+@@ -72,7 +73,9 @@
+             <Text className="font-display text-lg text-ink">{application.pet?.name}</Text>
+             <StatusBadge status={application.status} />
+           </View>
+-          <Text className="font-sans text-xs text-muted">Submitted {formatDateTime(application.createdAt)}</Text>
++          <Text className="font-sans text-xs text-muted">
++            {titleCase(application.type ?? "adoption")} application · Submitted {formatDateTime(application.createdAt)}
++          </Text>
+         </View>
+ 
+         {application.status === "pending" && (
+@@ -112,6 +115,12 @@
+           })}
+         </View>
+ 
++        {application.type === "foster" && application.status === "approved" && (
++          <View className="mb-5 rounded-xl bg-mintBg px-4 py-3">
++            <Text className="font-sans-medium text-sm text-mintDeep">Our team will contact you to start the foster placement.</Text>
++          </View>
++        )}
++
+         {application.stage === "rejected" && (
+           <View className="mb-5 rounded-xl border border-status-danger/20 bg-status-dangerBg px-4 py-3">
+             <Text className="font-sans-medium text-sm text-status-danger">Application rejected</Text>
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasUser/app/foster-dashboard.tsx carepaws2-main/lykasUser/app/foster-dashboard.tsx
+--- a/lykasUser/app/foster-dashboard.tsx	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasUser/app/foster-dashboard.tsx	2026-10-20 10:03:58.308820809 +0000
+@@ -54,7 +54,7 @@
+       ) : error ? (
+         <StateView state="error" message={error} onRetry={load} />
+       ) : fosters.length === 0 ? (
+-        <StateView state="empty" title="No active fosters" message="Apply to foster a pet from their profile page." />
++        <StateView state="empty" title="No active fosters" message="Apply to foster a pet from its profile page. Approved placements appear here." />
+       ) : (
+         <FlatList
+           data={fosters}
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasUser/app/pets/[id].tsx carepaws2-main/lykasUser/app/pets/[id].tsx
+--- a/lykasUser/app/pets/[id].tsx	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasUser/app/pets/[id].tsx	2026-10-20 10:03:58.308497637 +0000
+@@ -156,7 +156,14 @@
+           )}
+ 
+           {pet.status === "Available" && (
+-            <PrimaryButton label={`Apply to adopt ${pet.name}`} onPress={() => router.push(`/pets/apply/${pet._id}`)} />
++            <View className="gap-3">
++              <PrimaryButton label={`Apply to adopt ${pet.name}`} onPress={() => router.push(`/pets/apply/${pet._id}`)} />
++              <PrimaryButton
++                variant="secondary"
++                label={`Apply to foster ${pet.name}`}
++                onPress={() => router.push(`/pets/apply/${pet._id}?type=foster`)}
++              />
++            </View>
+           )}
+         </View>
+       </ScrollView>
+diff -ruN '--exclude=node_modules' '--exclude=package-lock.json' a/lykasUser/app/pets/apply/[id].tsx carepaws2-main/lykasUser/app/pets/apply/[id].tsx
+--- a/lykasUser/app/pets/apply/[id].tsx	2026-10-19 10:42:01.000000000 +0000
++++ b/lykasUser/app/pets/apply/[id].tsx	2026-10-20 10:03:58.308079418 +0000
+@@ -9,13 +9,17 @@
+ import colors from "../../../utils/colors";
+ 
+ export default function ApplyToPetScreen() {
+-  const { id } = useLocalSearchParams<{ id: string }>();
++  const { id, type: typeParam } = useLocalSearchParams<{ id: string; type?: string }>();
++  // Never trust the raw param: anything other than "foster" is an adoption.
++  const type = typeParam === "foster" ? "foster" : "adoption";
++  const isFoster = type === "foster";
+   const [phone, setPhone] = useState("");
+   const [address, setAddress] = useState("");
+   const [experience, setExperience] = useState("");
+   const [householdSize, setHouseholdSize] = useState("");
+   const [isRenting, setIsRenting] = useState(false);
+   const [landlordApproval, setLandlordApproval] = useState(false);
++  const [fosterPeriod, setFosterPeriod] = useState("");
+   const [error, setError] = useState<string | null>(null);
+   const [submitting, setSubmitting] = useState(false);
+ 
+@@ -24,6 +28,10 @@
+       setError("Phone and address are required.");
+       return;
+     }
++    if (isFoster && !fosterPeriod.trim()) {
++      setError("Please tell us how long you can foster.");
++      return;
++    }
+     setError(null);
+     setSubmitting(true);
+     try {
+@@ -35,9 +43,10 @@
+         householdSize: householdSize ? Number(householdSize) : undefined,
+         isRenting,
+         landlordApproval,
+-        type: "adoption",
++        type,
++        ...(isFoster ? { fosterPeriod: fosterPeriod.trim() } : {}),
+       });
+-      Alert.alert("Application submitted", "We'll be in touch about next steps.", [
++      Alert.alert("Application submitted", `We'll be in touch about your ${type} application.`, [
+         { text: "OK", onPress: () => router.replace("/(tabs)/my-applications") },
+       ]);
+     } catch (err) {
+@@ -54,7 +63,7 @@
+           <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" className="p-1">
+             <Ionicons name="chevron-back" size={22} color={colors.ink} />
+           </Pressable>
+-          <Text className="font-display text-xl text-ink">Adoption application</Text>
++          <Text className="font-display text-xl text-ink">{isFoster ? "Foster application" : "Adoption application"}</Text>
+         </View>
+ 
+         {error && (
+@@ -65,9 +74,18 @@
+ 
+         <FormInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="apply-phone" />
+         <FormInput label="Home address" value={address} onChangeText={setAddress} testID="apply-address" />
++        {isFoster && (
++          <FormInput
++            label="How long can you foster?"
++            value={fosterPeriod}
++            onChangeText={setFosterPeriod}
++            placeholder="e.g. 4 weeks"
++            testID="apply-foster-period"
++          />
++        )}
+         <FormInput label="Household size" value={householdSize} onChangeText={setHouseholdSize} keyboardType="number-pad" testID="apply-household" />
+         <FormInput
+-          label="Pet ownership / handling experience"
++          label={isFoster ? "Experience caring for pets (foster)" : "Pet ownership / handling experience"}
+           value={experience}
+           onChangeText={setExperience}
+           multiline
+@@ -93,7 +111,7 @@
+           </View>
+         )}
+ 
+-        <PrimaryButton label="Submit application" onPress={handleSubmit} loading={submitting} className="mt-2" testID="apply-submit" />
++        <PrimaryButton label={isFoster ? "Submit foster application" : "Submit application"} onPress={handleSubmit} loading={submitting} className="mt-2" testID="apply-submit" />
+       </ScrollView>
+     </SafeAreaView>
+   );

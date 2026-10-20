@@ -4,7 +4,7 @@ const router = express.Router();
 const authController = require("../controllers/authController");
 const { protect, adminOnly, requireRole } = require("../middleware/authMiddleware");
 const validateRequest = require("../middleware/validateRequest");
-const { loginLimiter, registerLimiter, passwordResetLimiter } = require("../middleware/rateLimitMiddleware");
+const { loginLimiter, registerLimiter, passwordResetLimiter, resendVerificationLimiter } = require("../middleware/rateLimitMiddleware");
 const { uploadImage } = require("../middleware/uploadMiddleware");
 const {
   registerSchema,
@@ -31,6 +31,7 @@ router.put("/profile", protect, validateRequest(updateProfileSchema), authContro
 router.post("/forgot-password", passwordResetLimiter, validateRequest(forgotPasswordSchema), authController.forgotPassword);
 router.post("/reset-password", validateRequest(resetPasswordSchema), authController.resetPassword);
 router.post("/verify-email", validateRequest(verifyEmailSchema), authController.verifyEmail);
+router.post("/resend-verification", protect, resendVerificationLimiter, authController.resendVerification);
 
 router.get("/favorites", protect, authController.getFavorites);
 router.post("/favorites/:petId", protect, authController.toggleFavorite);

@@ -392,7 +392,45 @@ curl -X PUT http://localhost:5000/api/email-templates/password_reset \
 
 Until you do this, registration/login/etc. still work fine — the email
 send just no-ops with a logged warning (`emailSkipped: true`) instead of
-throwing.
+throwing. Registration also returns `emailSent: false` in that case, and the
+mobile app tells the new user and offers **Resend email** (also available
+any time from Profile).
+
+### Email verification
+
+- **Where links go.** `verifyUrl` is the mobile deep link
+  (`${MOBILE_APP_URL}verify-email?token=...`, default `carepaws://`) and
+  stays the default. If `WEB_APP_URL` is set, the template also receives
+  `webVerifyUrl` (`${WEB_APP_URL}/verify-email?token=...`), which lands on the
+  admin build's public `/verify-email` page. That page only verifies the
+  token; it doesn't sign members in. To show the web link, include
+  `{{webVerifyUrl}}` in the `verify_email` template body, e.g.
+  `Can't open the app? Verify in your browser: {{webVerifyUrl}}`.
+- **Resend.** `POST /api/auth/resend-verification` (signed in, no body).
+  A new token replaces the old one, so the previous link stops working.
+  Limits: 60 seconds between sends and 3 per 15 minutes per user, plus 3 per
+  15 minutes per IP (Redis-backed like the other limiters). 429 responses
+  include `retryAfterSeconds`.
+- **What requires a verified email** (`403`, `code: "EMAIL_NOT_VERIFIED"`):
+  submitting an adoption or foster application (`POST /api/applications`),
+  enrolling in a shift/appointment (`POST /api/appointments/:id/enroll`), and
+  volunteer sign-up (`POST /api/volunteers/register`). Staff, admin and
+  super_admin accounts are exempt. Browsing, chat, donations, emergency
+  reports, login/refresh/logout, profile read/update, password reset and the
+  verification endpoints are never blocked.
+- **Existing accounts.** Accounts created before this change that are still
+  unverified would be blocked from the actions above. Choose one, then run it
+  yourself (nothing runs automatically; dry run by default):
+
+  ```bash
+  cd lykasServer
+  # preview who would be affected
+  node scripts/backfill-email-verification.js --mode=verify --cutoff=2026-10-20
+  # mark members who logged in before the cutoff as verified
+  node scripts/backfill-email-verification.js --mode=verify --cutoff=2026-10-20 --apply
+  # or send them a fresh verification email instead
+  node scripts/backfill-email-verification.js --mode=email --cutoff=2026-10-20 --apply
+  ```
 
 ---
 

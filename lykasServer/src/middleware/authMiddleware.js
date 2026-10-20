@@ -64,4 +64,14 @@ function requireRole(...roles) {
 
 const adminOnly = requireRole("staff", "admin", "super_admin");
 
-module.exports = { protect, requireRole, adminOnly };
+// Runs after protect(). Gates actions with real-world consequences behind a
+// verified email. Staff/admin accounts are exempt: they are provisioned by
+// the shelter, and they create records on behalf of applicants through the
+// admin app, so the check is about the member acting for themselves.
+function requireVerifiedEmail(req, res, next) {
+  if (!req.user) return res.status(401).json({ success: false, message: "Not authenticated" });
+  if (req.user.role !== "user" || req.user.emailVerified) return next();
+  return res.status(403).json({ success: false, code: "EMAIL_NOT_VERIFIED", message: "Please verify your email to continue" });
+}
+
+module.exports = { protect, requireRole, adminOnly, requireVerifiedEmail };

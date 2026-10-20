@@ -20,6 +20,7 @@ interface StageHistoryEntry {
 interface ApplicationDetail {
   _id: string;
   pet: { name: string; imageUrl?: string };
+  type?: "adoption" | "foster";
   status: string;
   stage: string;
   stageHistory: StageHistoryEntry[];
@@ -72,7 +73,9 @@ export default function ApplicationDetailsScreen() {
             <Text className="font-display text-lg text-ink">{application.pet?.name}</Text>
             <StatusBadge status={application.status} />
           </View>
-          <Text className="font-sans text-xs text-muted">Submitted {formatDateTime(application.createdAt)}</Text>
+          <Text className="font-sans text-xs text-muted">
+            {titleCase(application.type ?? "adoption")} application · Submitted {formatDateTime(application.createdAt)}
+          </Text>
         </View>
 
         {application.status === "pending" && (
@@ -111,6 +114,12 @@ export default function ApplicationDetailsScreen() {
             );
           })}
         </View>
+
+        {application.type === "foster" && application.status === "approved" && (
+          <View className="mb-5 rounded-xl bg-mintBg px-4 py-3">
+            <Text className="font-sans-medium text-sm text-mintDeep">Our team will contact you to start the foster placement.</Text>
+          </View>
+        )}
 
         {application.stage === "rejected" && (
           <View className="mb-5 rounded-xl border border-status-danger/20 bg-status-dangerBg px-4 py-3">

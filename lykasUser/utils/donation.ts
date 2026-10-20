@@ -1,7 +1,4 @@
-/** Quick-amount chips on Home (PHP). Must stay valid for `/donate`. */
-export const QUICK_DONATION_AMOUNTS = [100, 250, 500, 1000] as const;
-
-/** Shelter-editable impact copy shown under the quick-amount chips. */
+/** Shelter-editable impact copy shown on the Home donation card. */
 export const DONATION_IMPACT_LINE = "₱250 feeds a dog for a week";
 
 /** Short pitch shown at the top of the donation card. */

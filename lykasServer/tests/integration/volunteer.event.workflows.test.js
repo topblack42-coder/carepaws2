@@ -5,6 +5,7 @@ jest.mock("../../src/middleware/rateLimitMiddleware", () => ({
   loginLimiter: (req, res, next) => next(),
   registerLimiter: (req, res, next) => next(),
   passwordResetLimiter: (req, res, next) => next(),
+  resendVerificationLimiter: (req, res, next) => next(),
   webhookLimiter: (req, res, next) => next(),
 }));
 
@@ -18,6 +19,9 @@ async function registerAndLogin(email, role = "user") {
   const response = await request(app)
     .post("/api/auth/register")
     .send({ displayName: "Workflow Test", email, password: "password123" });
+
+  // These suites exercise actions gated by requireVerifiedEmail; verification itself is covered in emailVerification.test.js.
+  await User.findOneAndUpdate({ email }, { emailVerified: true });
 
   if (role === "user") return { token: response.body.data.accessToken, user: response.body.data.user };
 

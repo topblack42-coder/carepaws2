@@ -4,9 +4,10 @@ import ApplyToPetScreen from "../app/pets/apply/[id]";
 
 const mockReplace = jest.fn();
 const mockBack = jest.fn();
+let mockParams: Record<string, string> = { id: "pet1" };
 
 jest.mock("expo-router", () => ({
-  useLocalSearchParams: () => ({ id: "pet1" }),
+  useLocalSearchParams: () => mockParams,
   router: { replace: (...args: unknown[]) => mockReplace(...args), back: (...args: unknown[]) => mockBack(...args) },
 }));
 
@@ -25,6 +26,7 @@ describe("Adoption application form", () => {
     jest.mocked(api.post).mockReset();
     mockReplace.mockReset();
     mockBack.mockReset();
+    mockParams = { id: "pet1" };
     jest.spyOn(Alert, "alert").mockImplementation(() => {});
   });
 
@@ -106,5 +108,91 @@ describe("Adoption application form", () => {
 
     await waitFor(() => expect(screen.getByText("This pet is not currently available")).toBeTruthy());
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it("sends no fosterPeriod for an adoption application", async () => {
+    jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    render(<ApplyToPetScreen />);
+
+    expect(screen.getByText("Adoption application")).toBeTruthy();
+    expect(screen.queryByTestId("apply-foster-period")).toBeNull();
+
+    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
+    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
+    fireEvent.press(screen.getByTestId("apply-submit"));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const body = jest.mocked(api.post).mock.calls[0][1] as Record<string, unknown>;
+    expect(body.type).toBe("adoption");
+    expect(body).not.toHaveProperty("fosterPeriod");
+  });
+
+  it("falls back to an adoption application for an unknown type param", async () => {
+    mockParams = { id: "pet1", type: "foo" };
+    jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    render(<ApplyToPetScreen />);
+
+    expect(screen.getByText("Adoption application")).toBeTruthy();
+    expect(screen.queryByTestId("apply-foster-period")).toBeNull();
+
+    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
+    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
+    fireEvent.press(screen.getByTestId("apply-submit"));
+
+    await waitFor(() => expect(api.post).toHaveBeenCalled());
+    const body = jest.mocked(api.post).mock.calls[0][1] as Record<string, unknown>;
+    expect(body.type).toBe("adoption");
+    expect(body).not.toHaveProperty("fosterPeriod");
+  });
+
+  describe("foster mode (?type=foster)", () => {
+    beforeEach(() => {
+      mockParams = { id: "pet1", type: "foster" };
+    });
+
+    it("renders the foster title, field and labels", () => {
+      render(<ApplyToPetScreen />);
+
+      expect(screen.getByText("Foster application")).toBeTruthy();
+      expect(screen.getByText("How long can you foster?")).toBeTruthy();
+      expect(screen.getByText("Experience caring for pets (foster)")).toBeTruthy();
+      expect(screen.getByTestId("apply-foster-period")).toBeTruthy();
+      expect(screen.getByText("Submit foster application")).toBeTruthy();
+    });
+
+    it("blocks submit without a foster period", async () => {
+      render(<ApplyToPetScreen />);
+
+      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
+      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
+      fireEvent.press(screen.getByTestId("apply-submit"));
+
+      await waitFor(() => expect(screen.getByText("Please tell us how long you can foster.")).toBeTruthy());
+      expect(api.post).not.toHaveBeenCalled();
+    });
+
+    it("posts type foster with fosterPeriod and shows foster success text", async () => {
+      jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
+      render(<ApplyToPetScreen />);
+
+      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
+      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
+      fireEvent.changeText(screen.getByTestId("apply-foster-period"), "4 weeks");
+      fireEvent.press(screen.getByTestId("apply-submit"));
+
+      await waitFor(() =>
+        expect(api.post).toHaveBeenCalledWith(
+          "/api/applications",
+          expect.objectContaining({ pet: "pet1", type: "foster", fosterPeriod: "4 weeks" })
+        )
+      );
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith(
+          "Application submitted",
+          "We'll be in touch about your foster application.",
+          expect.any(Array)
+        )
+      );
+    });
   });
 });

@@ -159,7 +159,7 @@ async function createApplication(req, res, next) {
       status: { $in: ["pending", "approved"] },
     }).select("_id applicant status");
     if (activeApplication) {
-      return res.status(409).json({ success: false, message: "This pet already has an active adoption application" });
+      return res.status(409).json({ success: false, message: "This pet already has an active application" });
     }
 
     const { applicant: _ignoredApplicant, ...applicationFields } = req.body;
@@ -176,7 +176,7 @@ async function createApplication(req, res, next) {
     return res.status(201).json({ success: true, data: application });
   } catch (err) {
     if (err?.code === 11000 && err?.keyPattern?.pet) {
-      return res.status(409).json({ success: false, message: "This pet already has an active adoption application" });
+      return res.status(409).json({ success: false, message: "This pet already has an active application" });
     }
     next(err);
   }

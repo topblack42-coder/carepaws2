@@ -15,6 +15,12 @@ const userSchema = new mongoose.Schema(
     emailVerified: { type: Boolean, default: false },
     emailVerificationToken: { type: String, select: false },
     emailVerificationExpires: { type: Date, select: false },
+    // Resend throttling (per user): last send time, plus a rolling window
+    // counter. Kept on the user so the limit survives restarts and holds
+    // across instances without needing Redis.
+    emailVerificationLastSentAt: { type: Date, select: false },
+    emailVerificationWindowStartedAt: { type: Date, select: false },
+    emailVerificationSendCount: { type: Number, select: false },
     resetPasswordToken: { type: String, select: false },
     resetPasswordExpires: { type: Date, select: false },
 

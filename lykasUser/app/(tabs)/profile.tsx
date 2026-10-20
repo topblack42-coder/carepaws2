@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import colors from "../../utils/colors";
 import StatusBadge from "../../components/StatusBadge";
+import EmailVerificationBanner from "../../components/EmailVerificationBanner";
 
 interface MenuItemProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -58,6 +59,8 @@ export default function ProfileScreen() {
             </View>
           </View>
         </View>
+
+        <EmailVerificationBanner />
 
         <View className="mb-6 rounded-2xl border border-border bg-white px-4">
           <MenuItem icon="document-text-outline" label="My Applications" onPress={() => router.push("/(tabs)/my-applications")} />

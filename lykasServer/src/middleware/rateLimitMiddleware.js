@@ -54,6 +54,26 @@ const passwordResetLimiter = rateLimit({
   skip: (req) => !req.body?.email,
 });
 
+// Per-IP cap on resend-verification (the per-user cooldown and cap live in
+// utils/emailVerification.js). 3 requests per 15 minutes.
+const resendVerificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore("resend-verification"),
+  handler: (req, res) => {
+    const resetTime = req.rateLimit?.resetTime;
+    const retryAfterSeconds = resetTime ? Math.max(1, Math.ceil((resetTime.getTime() - Date.now()) / 1000)) : 900;
+    res.set("Retry-After", String(retryAfterSeconds));
+    res.status(429).json({
+      success: false,
+      message: `Too many verification requests. Please wait ${retryAfterSeconds} seconds and try again`,
+      retryAfterSeconds,
+    });
+  },
+});
+
 // Separate bucket from general API traffic (§11.6.8) — a burst of fake
 // webhook calls shouldn't be able to exhaust the limiter real users
 // depend on for login/browsing.
@@ -65,4 +85,4 @@ const webhookLimiter = rateLimit({
   store: redisStore("webhook"),
 });
 
-module.exports = { globalLimiter, loginLimiter, registerLimiter, passwordResetLimiter, webhookLimiter };
+module.exports = { globalLimiter, loginLimiter, registerLimiter, passwordResetLimiter, resendVerificationLimiter, webhookLimiter };

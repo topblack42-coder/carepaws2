@@ -10,6 +10,7 @@ import StateView from "../../components/StateView";
 import StatusBadge from "../../components/StatusBadge";
 import PrimaryButton from "../../components/PrimaryButton";
 import PetVideoPlayer, { type PetVideoInfo } from "../../components/PetVideoPlayer";
+import { needsEmailVerification, promptVerifyEmail } from "../../utils/emailVerification";
 import colors from "../../utils/colors";
 
 interface PetDetail {
@@ -80,6 +81,16 @@ export default function PetDetailScreen() {
     } finally {
       setTogglingFavorite(false);
     }
+  }
+
+  // Applying (adoption or foster) requires a verified email: prompt here
+  // instead of letting the form fail on submit.
+  function startApplication(path: string) {
+    if (needsEmailVerification(user)) {
+      promptVerifyEmail();
+      return;
+    }
+    router.push(path);
   }
 
   if (loading) return <StateView state="loading" />;
@@ -156,7 +167,14 @@ export default function PetDetailScreen() {
           )}
 
           {pet.status === "Available" && (
-            <PrimaryButton label={`Apply to adopt ${pet.name}`} onPress={() => router.push(`/pets/apply/${pet._id}`)} />
+            <View className="gap-3">
+              <PrimaryButton label={`Apply to adopt ${pet.name}`} onPress={() => startApplication(`/pets/apply/${pet._id}`)} />
+              <PrimaryButton
+                variant="secondary"
+                label={`Apply to foster ${pet.name}`}
+                onPress={() => startApplication(`/pets/apply/${pet._id}?type=foster`)}
+              />
+            </View>
           )}
         </View>
       </ScrollView>

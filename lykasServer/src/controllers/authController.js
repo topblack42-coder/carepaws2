@@ -7,6 +7,8 @@ const LoginHistory = require("../models/LoginHistory");
 const TokenBlacklist = require("../models/TokenBlacklist");
 
 const { sendTemplatedEmail } = require("../utils/emailService");
+const logger = require("../utils/logger");
+const { issueVerificationEmail, resendRetryAfterSeconds, claimResendSlot } = require("../utils/emailVerification");
 const {
   signAccessToken,
   verifyAccessToken,
@@ -58,30 +60,27 @@ async function register(req, res, next) {
       return res.status(409).json({ success: false, message: "An account with this email already exists" });
     }
 
-    const emailVerificationToken = crypto.randomBytes(32).toString("hex");
-    const user = await User.create({
-      displayName,
-      email,
-      password,
-      emailVerificationToken: hashToken(emailVerificationToken),
-      emailVerificationExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    });
+    const user = await User.create({ displayName, email, password });
 
-    const emailResult = await sendTemplatedEmail({
-      to: user.email,
-      templateKey: "verify_email",
-      data: {
-        displayName: user.displayName,
-        verifyUrl: `${process.env.MOBILE_APP_URL}verify-email?token=${emailVerificationToken}`,
-      },
-    });
+    // The account is kept even if the email can't be sent; the client uses
+    // emailSent to point the user at the resend flow.
+    const emailResult = await issueVerificationEmail(user);
+    if (!emailResult.emailSent) {
+      logger.warn({ userId: user._id, reason: emailResult.reason }, "Verification email not sent at registration");
+    }
 
     const { accessToken, refreshToken } = await issueSession(user, req);
 
     return res.status(201).json({
       success: true,
       message: "Account created",
-      data: { user: publicUser(user), accessToken, refreshToken, emailSkipped: emailResult.emailSkipped },
+      data: {
+        user: publicUser(user),
+        accessToken,
+        refreshToken,
+        emailSent: emailResult.emailSent,
+        emailSkipped: emailResult.emailSkipped,
+      },
     });
   } catch (err) {
     next(err);
@@ -354,7 +353,58 @@ async function verifyEmail(req, res, next) {
   }
 }
 
+// POST /api/auth/resend-verification (authenticated; acts only on req.user)
+async function resendVerification(req, res, next) {
+  try {
+    const user = await User.findById(req.user._id).select(
+      "+emailVerificationLastSentAt +emailVerificationWindowStartedAt +emailVerificationSendCount"
+    );
+    if (!user) return res.status(401).json({ success: false, message: "User no longer exists" });
+
+    if (user.emailVerified) {
+      return res.json({ success: true, message: "Email already verified", data: { emailSkipped: true, alreadyVerified: true } });
+    }
+
+    const retryAfterSeconds = resendRetryAfterSeconds(user);
+    if (retryAfterSeconds > 0) {
+      res.set("Retry-After", String(retryAfterSeconds));
+      return res.status(429).json({
+        success: false,
+        message: `Please wait ${retryAfterSeconds} seconds before requesting another verification email`,
+        retryAfterSeconds,
+      });
+    }
+
+    if (!(await claimResendSlot(user))) {
+      // A parallel request just claimed the slot.
+      res.set("Retry-After", "60");
+      return res.status(429).json({
+        success: false,
+        message: "A verification email was just sent. Please wait before requesting another",
+        retryAfterSeconds: 60,
+      });
+    }
+
+    const result = await issueVerificationEmail(user);
+
+    if (!result.emailSent && result.reason !== "not_configured") {
+      logger.warn({ userId: user._id, reason: result.reason }, "Resend verification email failed");
+      const status = result.reason === "send_failed" ? 502 : 503;
+      return res.status(status).json({ success: false, message: "We couldn't send the verification email right now. Please try again shortly" });
+    }
+
+    return res.json({
+      success: true,
+      message: result.emailSent ? "Verification email sent" : "Email delivery isn't configured on this server",
+      data: { emailSkipped: result.emailSkipped },
+    });
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
+  resendVerification,
   register,
   login,
   googleAuth,
