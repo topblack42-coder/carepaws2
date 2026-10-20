@@ -26,6 +26,7 @@
     },
     "android": {
       "package": "com.kernharu.carepaws",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#1E6B45"
@@ -33,8 +34,7 @@
       "permissions": [
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
-        "NOTIFICATIONS"
+        "WRITE_EXTERNAL_STORAGE"
       ],
       "softwareKeyboardLayoutMode": "resize"
     },

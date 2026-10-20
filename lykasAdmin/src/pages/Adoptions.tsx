@@ -74,7 +74,7 @@ export default function Adoptions() {
           <div className="flex justify-end gap-1">
             <button
               type="button"
-              onClick={() => navigate(`/adoptions/${app._id}`)}
+              onClick={() => navigate(`/adoptions/${app._id}`, { state: { fromList: true } })}
               className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
               aria-label={`View application from ${app.applicant?.displayName}`}
             >
