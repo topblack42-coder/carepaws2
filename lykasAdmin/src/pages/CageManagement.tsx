@@ -11,7 +11,7 @@ import StatusBadge from "../components/ui/StatusBadge";
 import { useToast } from "../context/ToastContext";
 
 interface Shelter { _id: string; name: string; status: string; }
-interface Pet { _id: string; name: string; species: "Dog" | "Cat" | "Other"; shelterId?: string | null; }
+interface Pet { _id: string; name: string; species: "Dog" | "Cat" | "Other"; }
 interface CageAssignment { _id: string; cageId?: { _id: string } | string; pet?: { _id: string; name: string; species: string } }
 interface Cage {
   _id: string;
@@ -35,7 +35,8 @@ export default function CageManagement() {
   const { showToast } = useToast();
   const [cages, setCages] = useState<Cage[]>([]);
   const [shelters, setShelters] = useState<Shelter[]>([]);
-  const [pets, setPets] = useState<Pet[]>([]);
+  const [eligiblePets, setEligiblePets] = useState<Pet[]>([]);
+  const [petsLoading, setPetsLoading] = useState(false);
   const [assignments, setAssignments] = useState<CageAssignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,15 +52,13 @@ export default function CageManagement() {
   async function load() {
     setLoading(true); setError(null);
     try {
-      const [cageRes, shelterRes, petRes, assignRes] = await Promise.all([
+      const [cageRes, shelterRes, assignRes] = await Promise.all([
         api.get("/api/shelter-care/cage-definitions"),
         api.get("/api/shelters"),
-        api.get("/api/pets/admin", { params: { limit: "100" } }),
         api.get("/api/shelter-care/cages"),
       ]);
       setCages(cageRes.data.data ?? []);
       setShelters(shelterRes.data.data ?? []);
-      setPets(petRes.data.data ?? []);
       setAssignments(assignRes.data.data ?? []);
     } catch (err) { setError(getApiErrorMessage(err, "Failed to load cage management data")); }
     finally { setLoading(false); }
@@ -72,6 +71,15 @@ export default function CageManagement() {
   }
   function openEdit(cage: Cage) {
     setEditing(cage); setForm({ shelterId: typeof cage.shelterId === "string" ? cage.shelterId : cage.shelterId._id, cageNumber: cage.cageNumber, section: cage.section ?? "", capacity: String(cage.capacity), status: cage.status, quarantineOnly: cage.quarantineOnly, allowedSpecies: cage.allowedSpecies, notes: cage.notes ?? "" }); setSaveError(null); setModalOpen(true);
+  }
+
+  async function openAssign(cage: Cage) {
+    setSelectedCage(cage); setPetId(""); setEligiblePets([]); setSaveError(null); setAssignOpen(true); setPetsLoading(true);
+    try {
+      const res = await api.get(`/api/shelter-care/cage-definitions/${cage._id}/eligible-pets`);
+      setEligiblePets(res.data.data ?? []);
+    } catch (err) { setSaveError(getApiErrorMessage(err, "Failed to load eligible pets")); }
+    finally { setPetsLoading(false); }
   }
 
   async function saveCage(e: FormEvent) {
@@ -121,7 +129,7 @@ export default function CageManagement() {
           <div className="mt-3 grid grid-cols-2 gap-2 text-sm"><div>Capacity <strong>{cage.capacity}</strong></div><div>Occupied <strong>{cage.currentOccupancy}</strong></div><div>Available <strong>{cage.availableCapacity}</strong></div><div>{cage.quarantineOnly ? "Quarantine only" : "Normal cage"}</div></div>
           <p className="mt-2 text-xs text-gray-500">Accepts: {cage.allowedSpecies.join(", ")}</p>
           {assignments.filter((a) => (typeof a.cageId === "string" ? a.cageId : a.cageId?._id) === cage._id).map((a) => <div key={a._id} className="mt-2 flex items-center justify-between rounded border border-gray-100 px-2 py-1 text-sm"><span>{a.pet?.name ?? "Assigned pet"}{a.pet?.species ? ` (${a.pet.species})` : ""}</span><Button variant="secondary" onClick={() => removePet(a._id)}><UserMinus className="h-4 w-4" /> Remove</Button></div>)}
-          <div className="mt-4 flex gap-2"><Button variant="secondary" onClick={() => openEdit(cage)}><Pencil className="h-4 w-4" /> Edit</Button>{cage.availableCapacity > 0 && cage.status === "active" && <Button onClick={() => { setSelectedCage(cage); setSaveError(null); setAssignOpen(true); }}>Assign</Button>}</div>
+          <div className="mt-4 flex gap-2"><Button variant="secondary" onClick={() => openEdit(cage)}><Pencil className="h-4 w-4" /> Edit</Button>{cage.availableCapacity > 0 && cage.status === "active" && <Button onClick={() => openAssign(cage)}>Assign</Button>}</div>
         </Card>;
       })}
     </div>}
@@ -140,7 +148,7 @@ export default function CageManagement() {
     </Modal>
 
     <Modal isOpen={assignOpen} onClose={() => setAssignOpen(false)} title={`Assign pet to cage ${selectedCage?.cageNumber ?? ""}`} footer={<><Button variant="secondary" onClick={() => setAssignOpen(false)} disabled={saving}>Cancel</Button><Button type="submit" form="assign-form" loading={saving}>Assign</Button></>}>
-      <form id="assign-form" onSubmit={assignPet}>{saveError && <Alert tone="danger">{saveError}</Alert>}<FormField label="Pet" htmlFor="cage-pet"><Select id="cage-pet" required value={petId} onChange={(e) => setPetId(e.target.value)}><option value="">Select pet</option>{pets.filter((p) => p.shelterId === (typeof selectedCage?.shelterId === "string" ? selectedCage.shelterId : selectedCage?.shelterId._id)).map((p) => <option key={p._id} value={p._id}>{p.name} ({p.species})</option>)}</Select></FormField><p className="text-xs text-gray-500">The server validates shelter, quarantine, species, capacity, and duplicate assignment rules.</p></form>
+      <form id="assign-form" onSubmit={assignPet}>{saveError && <Alert tone="danger">{saveError}</Alert>}<FormField label="Pet" htmlFor="cage-pet"><Select id="cage-pet" required value={petId} disabled={petsLoading} onChange={(e) => setPetId(e.target.value)}><option value="">{petsLoading ? "Loading pets..." : eligiblePets.length ? "Select pet" : "No eligible pets"}</option>{eligiblePets.map((p) => <option key={p._id} value={p._id}>{p.name} ({p.species})</option>)}</Select></FormField><p className="text-xs text-gray-500">Only pets that fit this cage are listed. The server still validates shelter, quarantine, species, capacity, and duplicate assignment rules.</p></form>
     </Modal>
   </div>;
 }

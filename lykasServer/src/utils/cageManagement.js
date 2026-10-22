@@ -35,6 +35,41 @@ async function getCagesWithOccupancy(filter = {}) {
   });
 }
 
+/**
+ * The single source of truth for cage assignment rules. Pure: takes already
+ * loaded data and returns the first rule violated as { message, statusCode },
+ * or null when the pet may go in the cage. Used by assertCageAssignmentAllowed
+ * (single pet, throws) and getEligiblePetsForCage (many pets, filters).
+ */
+function getCageAssignmentBlocker({ cage, pet, shelter, hasActiveAssignment, isQuarantined, occupancy, occupantSpecies }) {
+  const blocked = (message, statusCode = 409) => ({ message, statusCode });
+
+  if (!pet.shelterId) return blocked("Pet must be assigned to a shelter before cage assignment");
+  if (String(pet.shelterId) !== String(cage.shelterId)) return blocked("Pet and cage must belong to the same shelter");
+  if (cage.status !== "active") return blocked("Cannot assign a pet to an inactive or unavailable cage");
+  if (hasActiveAssignment) return blocked("Pet already has an active cage assignment");
+
+  if (isQuarantined !== Boolean(cage.quarantineOnly)) {
+    if (isQuarantined) return blocked("Quarantined pets can only be assigned to quarantine cages");
+    return blocked("Normal pets cannot be assigned to quarantine-only cages");
+  }
+
+  if (!cage.allowedSpecies.includes(pet.species)) return blocked(`Cage ${cage.cageNumber} does not accept ${pet.species} pets`);
+  if (occupancy >= cage.capacity) return blocked("Cage is at capacity");
+  if (occupantSpecies.some((species) => species && species !== pet.species)) {
+    return blocked("Cage cannot contain incompatible pet species");
+  }
+  if (!shelter || shelter.status === "inactive" || shelter.status === "under_maintenance") {
+    return blocked("Pets cannot be assigned in an inactive or unavailable shelter");
+  }
+  return null;
+}
+
+async function getCageOccupantSpecies(cageId) {
+  const occupants = await CageAssignment.find({ cageId, isActive: true }).populate("pet", "species");
+  return occupants.map((assignment) => assignment.pet?.species);
+}
+
 async function assertCageAssignmentAllowed(cageId, petId) {
   const [cage, pet] = await Promise.all([
     Cage.findById(cageId),
@@ -43,41 +78,73 @@ async function assertCageAssignmentAllowed(cageId, petId) {
 
   if (!cage) throw cageError("Cage not found", 404);
   if (!pet) throw cageError("Pet not found", 404);
-  if (!pet.shelterId) throw cageError("Pet must be assigned to a shelter before cage assignment");
-  if (String(pet.shelterId) !== String(cage.shelterId)) {
-    throw cageError("Pet and cage must belong to the same shelter");
-  }
-  if (cage.status !== "active") throw cageError("Cannot assign a pet to an inactive or unavailable cage");
 
-  const existingAssignment = await CageAssignment.findOne({ pet: pet._id, isActive: true });
-  if (existingAssignment) throw cageError("Pet already has an active cage assignment");
+  const [existingAssignment, quarantine, occupancy, occupantSpecies, shelter] = await Promise.all([
+    CageAssignment.findOne({ pet: pet._id, isActive: true }),
+    QuarantinePeriod.findOne({ pet: pet._id, isActive: true }),
+    getCageOccupancy(cage._id),
+    getCageOccupantSpecies(cage._id),
+    Shelter.findById(cage.shelterId).select("status"),
+  ]);
 
-  const quarantine = await QuarantinePeriod.findOne({ pet: pet._id, isActive: true });
-  if (Boolean(quarantine) !== Boolean(cage.quarantineOnly)) {
-    if (quarantine) throw cageError("Quarantined pets can only be assigned to quarantine cages");
-    throw cageError("Normal pets cannot be assigned to quarantine-only cages");
-  }
-
-  if (!cage.allowedSpecies.includes(pet.species)) {
-    throw cageError(`Cage ${cage.cageNumber} does not accept ${pet.species} pets`);
-  }
-
-  const occupancy = await getCageOccupancy(cage._id);
-  if (occupancy >= cage.capacity) throw cageError("Cage is at capacity");
-
-  if (occupancy > 0) {
-    const occupants = await CageAssignment.find({ cageId: cage._id, isActive: true }).populate("pet", "species");
-    if (occupants.some((assignment) => assignment.pet && assignment.pet.species !== pet.species)) {
-      throw cageError("Cage cannot contain incompatible pet species");
-    }
-  }
-
-  const shelter = await Shelter.findById(cage.shelterId).select("status");
-  if (!shelter || shelter.status === "inactive" || shelter.status === "under_maintenance") {
-    throw cageError("Pets cannot be assigned in an inactive or unavailable shelter");
-  }
+  const blocker = getCageAssignmentBlocker({
+    cage,
+    pet,
+    shelter,
+    hasActiveAssignment: Boolean(existingAssignment),
+    isQuarantined: Boolean(quarantine),
+    occupancy,
+    occupantSpecies,
+  });
+  if (blocker) throw cageError(blocker.message, blocker.statusCode);
 
   return { cage, pet };
 }
 
-module.exports = { cageError, getCagesWithOccupancy, getCageOccupancy, assertCageAssignmentAllowed };
+/**
+ * Pets that could be assigned to the cage right now: same shelter, not already
+ * caged, species accepted, quarantine status matching, and species-compatible
+ * with current occupants. Applies the same rules as assertCageAssignmentAllowed.
+ */
+async function getEligiblePetsForCage(cageId) {
+  const cage = await Cage.findById(cageId);
+  if (!cage) throw cageError("Cage not found", 404);
+
+  const [shelter, occupancy, occupantSpecies, candidates] = await Promise.all([
+    Shelter.findById(cage.shelterId).select("status"),
+    getCageOccupancy(cage._id),
+    getCageOccupantSpecies(cage._id),
+    Pet.find({ shelterId: cage.shelterId, isDeleted: { $ne: true } }).select("name species shelterId").sort({ name: 1 }),
+  ]);
+  if (!candidates.length) return [];
+
+  const candidateIds = candidates.map((pet) => pet._id);
+  const [caged, quarantined] = await Promise.all([
+    CageAssignment.distinct("pet", { pet: { $in: candidateIds }, isActive: true }),
+    QuarantinePeriod.distinct("pet", { pet: { $in: candidateIds }, isActive: true }),
+  ]);
+  const cagedIds = new Set(caged.map(String));
+  const quarantinedIds = new Set(quarantined.map(String));
+
+  return candidates.filter(
+    (pet) =>
+      !getCageAssignmentBlocker({
+        cage,
+        pet,
+        shelter,
+        hasActiveAssignment: cagedIds.has(String(pet._id)),
+        isQuarantined: quarantinedIds.has(String(pet._id)),
+        occupancy,
+        occupantSpecies,
+      })
+  );
+}
+
+module.exports = {
+  cageError,
+  getCagesWithOccupancy,
+  getCageOccupancy,
+  getCageAssignmentBlocker,
+  assertCageAssignmentAllowed,
+  getEligiblePetsForCage,
+};

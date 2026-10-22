@@ -4,7 +4,7 @@ const { HealthCheck, FeedingLog, BehavioralObservation, CageAssignment, Quaranti
 const Cage = require("../models/Cage");
 const Shelter = require("../models/Shelter");
 const Pet = require("../models/Pet");
-const { getCagesWithOccupancy, assertCageAssignmentAllowed } = require("../utils/cageManagement");
+const { getCagesWithOccupancy, assertCageAssignmentAllowed, getEligiblePetsForCage } = require("../utils/cageManagement");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const validateRequest = require("../middleware/validateRequest");
 const {
@@ -131,6 +131,15 @@ router.get("/cage-definitions", protect, adminOnly, async (req, res, next) => {
       return res.json({ success: true, data: eligible });
     }
     res.json({ success: true, data: cages });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/cage-definitions/:id/eligible-pets", protect, adminOnly, async (req, res, next) => {
+  try {
+    const pets = await getEligiblePetsForCage(req.params.id);
+    res.json({ success: true, data: pets });
   } catch (err) {
     next(err);
   }

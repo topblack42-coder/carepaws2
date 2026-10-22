@@ -142,4 +142,43 @@ describe("Baby book: CRUD and ownership", () => {
       .set("Authorization", `Bearer ${stranger.token}`);
     expect(deleteRes.status).toBe(404);
   });
+
+  it("lets the owner clear an entry's details by updating content to an empty string", async () => {
+    const createRes = await request(app)
+      .post("/api/baby-book")
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ pet: pet._id.toString(), title: "First walk", content: "Loved the park", category: "Milestone" });
+    const entryId = createRes.body.data._id;
+    expect(createRes.body.data.content).toBe("Loved the park");
+
+    const updateRes = await request(app)
+      .put(`/api/baby-book/entry/${entryId}`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ content: "" });
+    expect(updateRes.status).toBe(200);
+    expect(updateRes.body.data.content).toBe("");
+
+    const stored = await require("../../src/models/BabyBook").findById(entryId);
+    expect(stored.content).toBe("");
+    expect(stored.title).toBe("First walk");
+  });
+
+  it("clears details when content is sent as an empty multipart field (mobile FormData)", async () => {
+    const createRes = await request(app)
+      .post("/api/baby-book")
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ pet: pet._id.toString(), title: "Vet visit", content: "All good", category: "Health" });
+    const entryId = createRes.body.data._id;
+
+    const updateRes = await request(app)
+      .put(`/api/baby-book/entry/${entryId}`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .field("title", "Vet visit")
+      .field("content", "")
+      .field("category", "Health");
+    expect(updateRes.status).toBe(200);
+
+    const stored = await require("../../src/models/BabyBook").findById(entryId);
+    expect(stored.content).toBe("");
+  });
 });

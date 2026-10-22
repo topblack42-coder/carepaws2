@@ -3,7 +3,7 @@ const Shelter = require("../../src/models/Shelter");
 const Pet = require("../../src/models/Pet");
 const Cage = require("../../src/models/Cage");
 const { CageAssignment, QuarantinePeriod } = require("../../src/models/ShelterCare");
-const { assertCageAssignmentAllowed, getCagesWithOccupancy } = require("../../src/utils/cageManagement");
+const { assertCageAssignmentAllowed, getCagesWithOccupancy, getEligiblePetsForCage } = require("../../src/utils/cageManagement");
 
 describe("cage management", () => {
   async function shelter() {
@@ -58,5 +58,49 @@ describe("cage management", () => {
     await CageAssignment.create({ pet: p._id, cageId: c._id, cageNumber: c.cageNumber, assignedBy: new mongoose.Types.ObjectId() });
     rows = await getCagesWithOccupancy({ _id: c._id });
     expect(rows[0]).toMatchObject({ currentOccupancy: 1, availableCapacity: 1, isEmpty: false });
+  });
+
+  it("lists only pets that can actually be assigned to the cage", async () => {
+    const s = await shelter(); const other = await shelter();
+    const c = await cage(s._id, { capacity: 3, allowedSpecies: ["Dog", "Cat"] });
+    const eligibleDog = await pet(s._id, "Dog");
+    const caged = await pet(s._id, "Dog");
+    const wrongSpecies = await pet(s._id, "Other");
+    const quarantined = await pet(s._id, "Dog");
+    const otherShelter = await pet(other._id, "Dog");
+    const deleted = await Pet.create({ name: "Gone", species: "Dog", shelterId: s._id, isDeleted: true });
+    const elsewhere = await cage(s._id);
+    await CageAssignment.create({ pet: caged._id, cageId: elsewhere._id, cageNumber: elsewhere.cageNumber, assignedBy: new mongoose.Types.ObjectId() });
+    await QuarantinePeriod.create({ pet: quarantined._id, startDate: new Date(), reason: "Test", startedBy: new mongoose.Types.ObjectId() });
+
+    const ids = (await getEligiblePetsForCage(c._id)).map((p) => String(p._id));
+    expect(ids).toEqual([String(eligibleDog._id)]);
+    [caged, wrongSpecies, quarantined, otherShelter, deleted].forEach((p) => expect(ids).not.toContain(String(p._id)));
+  });
+
+  it("limits eligible pets to the species already in the cage and returns quarantined pets for quarantine cages", async () => {
+    const s = await shelter();
+    const c = await cage(s._id, { capacity: 3, allowedSpecies: ["Dog", "Cat"] });
+    const occupant = await pet(s._id, "Dog"); const dog = await pet(s._id, "Dog"); const cat = await pet(s._id, "Cat");
+    await CageAssignment.create({ pet: occupant._id, cageId: c._id, cageNumber: c.cageNumber, assignedBy: new mongoose.Types.ObjectId() });
+
+    const ids = (await getEligiblePetsForCage(c._id)).map((p) => String(p._id));
+    expect(ids).toEqual([String(dog._id)]);
+    expect(ids).not.toContain(String(cat._id));
+
+    const qCage = await cage(s._id, { quarantineOnly: true });
+    await QuarantinePeriod.create({ pet: cat._id, startDate: new Date(), reason: "Test", startedBy: new mongoose.Types.ObjectId() });
+    expect((await getEligiblePetsForCage(qCage._id)).map((p) => String(p._id))).toEqual([String(cat._id)]);
+  });
+
+  it("returns no eligible pets for a full or inactive cage and 404s for an unknown cage", async () => {
+    const s = await shelter(); const p = await pet(s._id);
+    const inactive = await cage(s._id, { status: "inactive" });
+    expect(await getEligiblePetsForCage(inactive._id)).toEqual([]);
+    const full = await cage(s._id, { capacity: 1 }); const occupant = await pet(s._id);
+    await CageAssignment.create({ pet: occupant._id, cageId: full._id, cageNumber: full.cageNumber, assignedBy: new mongoose.Types.ObjectId() });
+    expect(await getEligiblePetsForCage(full._id)).toEqual([]);
+    expect(p).toBeTruthy();
+    await expect(getEligiblePetsForCage(new mongoose.Types.ObjectId())).rejects.toMatchObject({ statusCode: 404 });
   });
 });

@@ -27,6 +27,7 @@ export default function BabyBookScreen() {
   const [entries, setEntries] = useState<BabyBookEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [formVisible, setFormVisible] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -62,6 +63,7 @@ export default function BabyBookScreen() {
     setCategory("General");
     setPhoto(null);
     setExistingPhotoUrl(null);
+    setSaveError(null);
     setFormVisible(true);
   }
 
@@ -72,6 +74,7 @@ export default function BabyBookScreen() {
     setCategory(entry.category);
     setPhoto(null);
     setExistingPhotoUrl(entry.photoUrl ?? null);
+    setSaveError(null);
     setFormVisible(true);
   }
 
@@ -80,6 +83,7 @@ export default function BabyBookScreen() {
     setEditingId(null);
     setPhoto(null);
     setExistingPhotoUrl(null);
+    setSaveError(null);
   }
 
   async function pickPhoto() {
@@ -100,10 +104,12 @@ export default function BabyBookScreen() {
   async function handleSave() {
     if (!title) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const formData = new FormData();
       formData.append("title", title);
-      if (content) formData.append("content", content);
+      // When editing, always send content (even empty) so Details can be cleared.
+      if (content || editingId) formData.append("content", content);
       formData.append("category", category);
       if (photo) {
         formData.append("photo", {
@@ -125,7 +131,7 @@ export default function BabyBookScreen() {
       closeForm();
       load();
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to save entry"));
+      setSaveError(getApiErrorMessage(err, "Failed to save entry"));
     } finally {
       setSaving(false);
     }
@@ -222,6 +228,11 @@ export default function BabyBookScreen() {
                 </Pressable>
               )}
             </View>
+            {saveError && (
+              <View className="mb-4 rounded-xl border border-status-danger/20 bg-status-dangerBg px-4 py-3">
+                <Text className="font-sans text-sm text-status-danger">{saveError}</Text>
+              </View>
+            )}
             <FormInput label="Title" value={title} onChangeText={setTitle} />
             <FormInput
               label="Details"
