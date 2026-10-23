@@ -31,6 +31,7 @@ router.put("/profile", protect, validateRequest(updateProfileSchema), authContro
 router.post("/forgot-password", passwordResetLimiter, validateRequest(forgotPasswordSchema), authController.forgotPassword);
 router.post("/reset-password", validateRequest(resetPasswordSchema), authController.resetPassword);
 router.post("/verify-email", validateRequest(verifyEmailSchema), authController.verifyEmail);
+router.get("/verify-email-link", authController.verifyEmailLink);
 router.post("/resend-verification", protect, resendVerificationLimiter, authController.resendVerification);
 
 router.get("/favorites", protect, authController.getFavorites);

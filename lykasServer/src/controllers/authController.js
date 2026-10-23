@@ -328,28 +328,48 @@ async function resetPassword(req, res, next) {
 }
 
 // POST /api/auth/verify-email
+async function consumeVerificationToken(token) {
+  const tokenHash = hashToken(token);
+  const user = await User.findOne({
+    emailVerificationToken: tokenHash,
+    emailVerificationExpires: { $gt: new Date() },
+  }).select("+emailVerificationToken +emailVerificationExpires");
+
+  if (!user) return false;
+
+  user.emailVerified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpires = undefined;
+  await user.save();
+  return true;
+}
+
 async function verifyEmail(req, res, next) {
   try {
-    const { token } = req.body;
-    const tokenHash = hashToken(token);
-
-    const user = await User.findOne({
-      emailVerificationToken: tokenHash,
-      emailVerificationExpires: { $gt: new Date() },
-    }).select("+emailVerificationToken +emailVerificationExpires");
-
-    if (!user) {
+    const ok = await consumeVerificationToken(req.body.token);
+    if (!ok) {
       return res.status(400).json({ success: false, message: "Invalid or expired verification token" });
     }
-
-    user.emailVerified = true;
-    user.emailVerificationToken = undefined;
-    user.emailVerificationExpires = undefined;
-    await user.save();
-
     return res.json({ success: true, message: "Email verified" });
   } catch (err) {
     next(err);
+  }
+}
+
+// GET /api/auth/verify-email-link?token=... — one-click link from the email.
+// Verifies directly and renders a small HTML page (no app/web client needed).
+async function verifyEmailLink(req, res) {
+  const page = (title, msg) =>
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title></head>` +
+    `<body style="font-family:system-ui,sans-serif;text-align:center;padding:15vh 24px;color:#1f2937"><h1>${title}</h1><p>${msg}</p></body></html>`;
+  try {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (token.length < 10 || !(await consumeVerificationToken(token))) {
+      return res.status(400).type("html").send(page("Link invalid or expired", "Open the CarePaws app and request a new verification email."));
+    }
+    return res.type("html").send(page("Email verified \u{1F43E}", "Thanks! You can close this page and return to the CarePaws app."));
+  } catch (err) {
+    return res.status(500).type("html").send(page("Something went wrong", "Please try again in a moment."));
   }
 }
 
@@ -414,6 +434,7 @@ module.exports = {
   forgotPassword,
   resetPassword,
   verifyEmail,
+  verifyEmailLink,
 };
 
 // ===== Admin user-management (mounted under /api/auth per §5.3) =====

@@ -32,9 +32,15 @@ async function issueVerificationEmail(user) {
     }
   );
 
+  const appVerifyUrl = `${process.env.MOBILE_APP_URL}verify-email?token=${token}`;
   const data = {
     displayName: user.displayName,
-    verifyUrl: `${process.env.MOBILE_APP_URL}verify-email?token=${token}`,
+    appVerifyUrl,
+    // When API_PUBLIC_URL is set, {{verifyUrl}} is a clickable https link the
+    // server verifies directly; otherwise it stays the carepaws:// deep link.
+    verifyUrl: process.env.API_PUBLIC_URL
+      ? `${process.env.API_PUBLIC_URL.replace(/\/+$/, "")}/api/auth/verify-email-link?token=${token}`
+      : appVerifyUrl,
   };
   // Optional web fallback for people who can't open the carepaws:// deep link.
   // Only usable if the verify_email template references {{webVerifyUrl}}.
