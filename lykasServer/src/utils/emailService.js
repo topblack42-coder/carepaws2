@@ -4,7 +4,40 @@ const logger = require("./logger");
 let transporter = null;
 let configured = false;
 
+// Mailjet Send API (HTTPS, port 443). Preferred on hosts that block outbound
+// SMTP ports (e.g. Render free tier). Enabled when both keys are set.
+function mailjetEnabled() {
+  return Boolean(process.env.MAILJET_API_KEY && process.env.MAILJET_SECRET_KEY && process.env.EMAIL_FROM);
+}
+
+async function sendViaMailjet({ to, subject, html }) {
+  const auth = Buffer.from(`${process.env.MAILJET_API_KEY}:${process.env.MAILJET_SECRET_KEY}`).toString("base64");
+  const res = await fetch("https://api.mailjet.com/v3.1/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
+    body: JSON.stringify({
+      Messages: [
+        {
+          From: { Email: process.env.EMAIL_FROM, Name: process.env.EMAIL_FROM_NAME || "CarePaws" },
+          To: [{ Email: to }],
+          Subject: subject,
+          HTMLPart: html,
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) {
+    throw new Error(`Mailjet API ${res.status}: ${(await res.text()).slice(0, 500)}`);
+  }
+}
+
 function buildTransporter() {
+  if (mailjetEnabled()) {
+    configured = true;
+    return null; // API mode: no SMTP transporter needed
+  }
+
   const { EMAIL_SERVICE, EMAIL_USER, EMAIL_PASSWORD, EMAIL_HOST, EMAIL_PORT, EMAIL_USERNAME } = process.env;
 
   if (EMAIL_SERVICE && EMAIL_USER && EMAIL_PASSWORD) {
@@ -62,14 +95,18 @@ async function sendTemplatedEmail({ to, templateKey, data = {} }) {
 }
 
 async function sendRawEmail({ to, subject, html }) {
-  if (!configured || !transporter) {
+  if (!configured || (!transporter && !mailjetEnabled())) {
     logger.warn({ to, subject }, "Email skipped — no transport configured");
     return { emailSkipped: true, reason: "not_configured" };
   }
 
   try {
+    if (mailjetEnabled()) {
+      await sendViaMailjet({ to, subject, html });
+      return { emailSkipped: false };
+    }
     await transporter.sendMail({
-      from: process.env.EMAIL_USER || process.env.EMAIL_USERNAME,
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER || process.env.EMAIL_USERNAME,
       to,
       subject,
       html,
