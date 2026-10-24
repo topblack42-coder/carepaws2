@@ -14,6 +14,8 @@ export interface AppUser {
   profilePicture: string | null;
   identityVerificationStatus: "unverified" | "pending" | "verified" | "rejected";
   notificationsEnabled: boolean;
+  phone?: string | null;
+  address?: string | null;
 }
 
 interface AuthContextValue {

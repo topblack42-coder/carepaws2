@@ -33,6 +33,9 @@ function publicUser(user) {
     emailVerified: user.emailVerified,
     profilePicture: user.profilePicture,
     identityVerificationStatus: user.identityVerificationStatus,
+    notificationsEnabled: user.notificationsEnabled,
+    phone: user.phone,
+    address: user.address,
   };
 }
 
@@ -513,7 +516,19 @@ async function listUsers(req, res, next) {
 async function verificationQueue(req, res, next) {
   try {
     const users = await User.find({ identityVerificationStatus: "pending" }).sort({ updatedAt: 1 });
-    return res.json({ success: true, data: users });
+    // Attach each user's most recent government ID file so staff can open it
+    // straight from the queue.
+    const UserDocument = require("../models/UserDocument");
+    const docs = await UserDocument.find({ user: { $in: users.map((u) => u._id) }, type: "government_id" })
+      .sort({ createdAt: -1 })
+      .select("user fileUrl");
+    const idByUser = new Map();
+    for (const d of docs) {
+      const key = d.user.toString();
+      if (!idByUser.has(key)) idByUser.set(key, d.fileUrl);
+    }
+    const data = users.map((u) => ({ ...u.toObject(), idDocumentUrl: idByUser.get(u._id.toString()) || null }));
+    return res.json({ success: true, data });
   } catch (err) {
     next(err);
   }

@@ -6,12 +6,30 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import { api, getApiErrorMessage } from "../../utils/api";
 import { registerForPushNotificationsAsync, unregisterPushNotifications } from "../../utils/pushNotifications";
+import FormInput from "../../components/FormInput";
+import PrimaryButton from "../../components/PrimaryButton";
 import colors from "../../utils/colors";
 
 export default function SettingsScreen() {
   const { user, refreshUser } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = useState(user?.notificationsEnabled ?? true);
   const [busy, setBusy] = useState(false);
+  const [phone, setPhone] = useState(user?.phone ?? "");
+  const [address, setAddress] = useState(user?.address ?? "");
+  const [savingContact, setSavingContact] = useState(false);
+
+  async function saveContact() {
+    setSavingContact(true);
+    try {
+      await api.put("/api/auth/profile", { phone: phone.trim(), address: address.trim() });
+      await refreshUser();
+      Alert.alert("Saved", "Your contact details were updated.");
+    } catch (err) {
+      Alert.alert("Something went wrong", getApiErrorMessage(err));
+    } finally {
+      setSavingContact(false);
+    }
+  }
 
   async function toggleNotifications(value: boolean) {
     setBusy(true);
@@ -63,6 +81,13 @@ export default function SettingsScreen() {
               trackColor={{ true: colors.primary, false: colors.border }}
             />
           </View>
+        </View>
+
+        <View className="mb-6 rounded-2xl border border-border bg-white p-4">
+          <Text className="mb-2 font-sans-medium text-base text-ink">Contact details</Text>
+          <FormInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="settings-phone" />
+          <FormInput label="Home address" value={address} onChangeText={setAddress} testID="settings-address" />
+          <PrimaryButton label="Save contact details" onPress={saveContact} loading={savingContact} className="mt-2" testID="settings-save-contact" />
         </View>
 
         <View className="rounded-2xl border border-border bg-white p-4">
