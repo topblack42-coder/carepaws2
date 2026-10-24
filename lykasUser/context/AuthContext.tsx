@@ -2,6 +2,7 @@ import { AppState } from "react-native";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, tokenStore, setSessionExpiredHandler, setEmailNotVerifiedHandler, getResponseStatus } from "../utils/api";
 import { promptVerifyEmail } from "../utils/emailVerification";
+import { registerForPushNotificationsAsync } from "../utils/pushNotifications";
 
 export interface AppUser {
   id: string;
@@ -158,6 +159,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await api.get("/api/auth/me");
     setUser(res.data.data.user);
   }, []);
+
+  // Auto-register this device for push as soon as a user is signed in
+  // (new installs, fresh logins, and restored sessions). Skipped when the
+  // user has switched notifications off in Settings. Failures are silent —
+  // the Settings toggle remains the manual fallback.
+  const pushUserId = user?.id;
+  const pushEnabled = user?.notificationsEnabled !== false;
+  useEffect(() => {
+    if (!pushUserId || !pushEnabled) return;
+    registerForPushNotificationsAsync().catch(() => {});
+  }, [pushUserId, pushEnabled]);
 
   // While the email is unverified, re-check when the app returns to the
   // foreground (e.g. after tapping the link in a mail app) so the profile
