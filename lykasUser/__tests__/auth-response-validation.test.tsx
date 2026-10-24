@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { api } from '../utils/api';
@@ -16,9 +17,9 @@ function TestLoginButton() {
   const [err, setErr] = useState<string | null>(null);
 
   return (
-    <>
-      <button
-        onClick={async () => {
+    <View>
+      <Pressable
+        onPress={async () => {
           try {
             // Using dummy creds — api.post is mocked to return a response
             // with missing tokens in this test.
@@ -29,10 +30,10 @@ function TestLoginButton() {
           }
         }}
       >
-        login
-      </button>
-      {err ? <div>{err}</div> : null}
-    </>
+        <Text>login</Text>
+      </Pressable>
+      {err ? <Text>{err}</Text> : null}
+    </View>
   );
 }
 
@@ -51,7 +52,7 @@ describe('Auth response validation', () => {
       </AuthProvider>
     );
 
-    fireEvent.click(screen.getByText('login'));
+    fireEvent.press(screen.getByText('login'));
 
     await waitFor(() => {
       expect(screen.getByText('Authentication response missing tokens.')).toBeTruthy();

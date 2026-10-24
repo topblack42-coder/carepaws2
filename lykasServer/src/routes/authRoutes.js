@@ -4,7 +4,7 @@ const router = express.Router();
 const authController = require("../controllers/authController");
 const { protect, adminOnly, requireRole } = require("../middleware/authMiddleware");
 const validateRequest = require("../middleware/validateRequest");
-const { loginLimiter, registerLimiter, passwordResetLimiter, resendVerificationLimiter } = require("../middleware/rateLimitMiddleware");
+const { loginLimiter, registerLimiter, passwordResetLimiter, resendVerificationLimiter, resetLinkLimiter } = require("../middleware/rateLimitMiddleware");
 const { uploadImage } = require("../middleware/uploadMiddleware");
 const {
   registerSchema,
@@ -30,6 +30,7 @@ router.get("/me", protect, authController.me);
 router.put("/profile", protect, validateRequest(updateProfileSchema), authController.updateProfile);
 router.post("/forgot-password", passwordResetLimiter, validateRequest(forgotPasswordSchema), authController.forgotPassword);
 router.post("/reset-password", validateRequest(resetPasswordSchema), authController.resetPassword);
+router.get("/reset-password-link", resetLinkLimiter, authController.resetPasswordLink);
 router.post("/verify-email", validateRequest(verifyEmailSchema), authController.verifyEmail);
 router.get("/verify-email-link", authController.verifyEmailLink);
 router.post("/resend-verification", protect, resendVerificationLimiter, authController.resendVerification);

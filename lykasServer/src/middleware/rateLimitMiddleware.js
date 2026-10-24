@@ -74,6 +74,16 @@ const resendVerificationLimiter = rateLimit({
   },
 });
 
+// Per-IP cap on the reset-email bridge page (GET /reset-password-link). It
+// never touches the token, so this only guards against hammering the endpoint.
+const resetLinkLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: redisStore("reset-link"),
+});
+
 // Separate bucket from general API traffic (§11.6.8) — a burst of fake
 // webhook calls shouldn't be able to exhaust the limiter real users
 // depend on for login/browsing.
@@ -85,4 +95,4 @@ const webhookLimiter = rateLimit({
   store: redisStore("webhook"),
 });
 
-module.exports = { globalLimiter, loginLimiter, registerLimiter, passwordResetLimiter, resendVerificationLimiter, webhookLimiter };
+module.exports = { globalLimiter, loginLimiter, registerLimiter, passwordResetLimiter, resendVerificationLimiter, resetLinkLimiter, webhookLimiter };

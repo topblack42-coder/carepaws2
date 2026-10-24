@@ -21,6 +21,7 @@ const connectDB = require("./config/db");
 const { connectRedis } = require("./config/redis");
 const startCronJobs = require("./cronJob");
 const { checkPaymentConfig } = require("./utils/paymentConfigCheck");
+const { checkPublicUrlConfig } = require("./utils/authLinks");
 const logger = require("./utils/logger");
 const requestId = require("./middleware/requestId");
 const apiMonitor = require("./middleware/apiMonitorMiddleware");
@@ -255,6 +256,8 @@ async function start() {
   try {
     const paymentConfigWarning = checkPaymentConfig();
     if (paymentConfigWarning) logger.warn(paymentConfigWarning);
+    const publicUrlWarning = checkPublicUrlConfig();
+    if (publicUrlWarning) logger.warn(publicUrlWarning);
 
     await connectDB();
     await connectRedis();

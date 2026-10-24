@@ -8,6 +8,7 @@ const TokenBlacklist = require("../models/TokenBlacklist");
 
 const { sendTemplatedEmail } = require("../utils/emailService");
 const logger = require("../utils/logger");
+const { buildResetUrls, getWebBaseUrl, APP_SCHEME_URL } = require("../utils/authLinks");
 const { issueVerificationEmail, resendRetryAfterSeconds, claimResendSlot } = require("../utils/emailVerification");
 const {
   signAccessToken,
@@ -286,13 +287,60 @@ async function forgotPassword(req, res, next) {
     await sendTemplatedEmail({
       to: user.email,
       templateKey: "password_reset",
-      data: { displayName: user.displayName, resetUrl: `${process.env.MOBILE_APP_URL}reset-password?token=${resetToken}` },
+      data: { displayName: user.displayName, ...buildResetUrls(resetToken) },
     });
 
     return res.json({ success: true, message: "If that email exists, a reset link has been sent" });
   } catch (err) {
     next(err);
   }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// GET /api/auth/reset-password-link?token=... — the https link in the reset
+// email. Redirect bridge only: it never reads, validates or consumes the token
+// (POST /reset-password does that). It hands off to the app via carepaws://
+// and offers a browser fallback. The token is URL-encoded, then HTML-escaped,
+// and the script reads the link from the DOM rather than embedding the token
+// in JS.
+async function resetPasswordLink(req, res) {
+  const nonce = crypto.randomBytes(16).toString("base64");
+  // helmet's default CSP blocks inline script; allow only this page's nonce'd one.
+  res.set({
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`,
+  });
+
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const shell = (body, script = "") =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Reset your CarePaws password</title>` +
+    `<style nonce="${nonce}">body{font-family:system-ui,sans-serif;text-align:center;padding:12vh 24px;color:#1f2937}` +
+    `.btn{display:inline-block;padding:12px 24px;background:#1E6B45;color:#fff;border-radius:8px;text-decoration:none;font-weight:600}` +
+    `p{max-width:420px;margin:16px auto}a.link{color:#1E6B45}</style></head><body>${body}${script}</body></html>`;
+
+  if (token.length < 10 || token.length > 512) {
+    return res.status(400).type("html").send(shell("<h1>Link invalid</h1><p>Open the CarePaws app and request a new password reset email.</p>"));
+  }
+
+  const encoded = encodeURIComponent(token);
+  const appUrl = escapeHtml(`${APP_SCHEME_URL}reset-password?token=${encoded}`);
+  const webBase = getWebBaseUrl();
+  const webLink = webBase
+    ? `<p><a class="link" href="${escapeHtml(`${webBase}/reset-password?token=${encoded}`)}">Open in browser</a></p>`
+    : "";
+
+  const body =
+    `<h1>Reset your password \u{1F43E}</h1>` +
+    `<p>Opening the CarePaws app&hellip; If nothing happens, tap the button below.</p>` +
+    `<p><a id="open-app" class="btn" href="${appUrl}">Open CarePaws app</a></p>` +
+    webLink +
+    `<p style="font-size:14px;color:#6b7280">This link works once you have the CarePaws app installed. It expires 1 hour after it was requested.</p>`;
+  const script = `<script nonce="${nonce}">window.location = document.getElementById("open-app").href;</script>`;
+  return res.type("html").send(shell(body, script));
 }
 
 // POST /api/auth/reset-password
@@ -435,6 +483,7 @@ module.exports = {
   resetPassword,
   verifyEmail,
   verifyEmailLink,
+  resetPasswordLink,
 };
 
 // ===== Admin user-management (mounted under /api/auth per §5.3) =====
@@ -648,7 +697,7 @@ async function forceReset(req, res, next) {
     await sendTemplatedEmail({
       to: user.email,
       templateKey: "password_reset",
-      data: { displayName: user.displayName, resetUrl: `${process.env.MOBILE_APP_URL}reset-password?token=${resetToken}` },
+      data: { displayName: user.displayName, ...buildResetUrls(resetToken) },
     });
 
     await writeAuditLog({ actor: req.user._id, action: "user.force_reset", entityType: "User", entityId: user._id, req });

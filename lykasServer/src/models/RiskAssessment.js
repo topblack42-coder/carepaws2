@@ -30,7 +30,7 @@ const riskAssessmentSchema = new mongoose.Schema(
 // riskLevel = Low if >= 24, Medium if >= 15, else High. Computed
 // server-side on every save — never trust a client-supplied riskLevel
 // or totalScore (§5.2).
-riskAssessmentSchema.pre("save", function computeRisk(next) {
+riskAssessmentSchema.pre("save", function computeRisk() {
   const s = this.scores;
   this.totalScore =
     s.housingStability + s.financialReadiness + s.petExperience + s.lifestyleMatch + s.familyCommitment + s.knowledgeOfPet;
@@ -38,8 +38,6 @@ riskAssessmentSchema.pre("save", function computeRisk(next) {
   if (this.totalScore >= 24) this.riskLevel = "Low";
   else if (this.totalScore >= 15) this.riskLevel = "Medium";
   else this.riskLevel = "High";
-
-  next();
 });
 
 module.exports = mongoose.model("RiskAssessment", riskAssessmentSchema);
