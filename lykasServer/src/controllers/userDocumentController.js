@@ -1,6 +1,7 @@
 const cloudinary = require("../config/cloudinary");
 const UserDocument = require("../models/UserDocument");
 const Application = require("../models/Application");
+const User = require("../models/User");
 
 function uploadBufferToCloudinary(buffer, folder) {
   return new Promise((resolve, reject) => {
@@ -76,6 +77,15 @@ async function upload(req, res, next) {
       fileSize: req.file.size,
     });
 
+    // A government ID upload puts the user in the staff review queue.
+    // Already-verified users are left alone.
+    if (doc.type === "government_id") {
+      await User.updateOne(
+        { _id: req.user._id, identityVerificationStatus: { $in: ["unverified", "rejected"] } },
+        { identityVerificationStatus: "pending" }
+      );
+    }
+
     return res.status(201).json({ success: true, data: doc });
   } catch (err) {
     if (err?.statusCode) return res.status(err.statusCode).json({ success: false, message: err.message });
@@ -131,6 +141,19 @@ async function verify(req, res, next) {
       doc.rejectedReason = undefined;
     }
     await doc.save();
+
+    // Keep the user's identity status in sync with their government ID review.
+    if (doc.type === "government_id" && (doc.status === "verified" || doc.status === "rejected")) {
+      await User.updateOne(
+        { _id: doc.user },
+        {
+          identityVerificationStatus: doc.status,
+          identityVerifiedBy: req.user._id,
+          identityVerifiedAt: new Date(),
+          identityVerificationNotes: doc.status === "rejected" ? doc.rejectedReason || null : null,
+        }
+      );
+    }
 
     return res.json({ success: true, data: doc });
   } catch (err) {
