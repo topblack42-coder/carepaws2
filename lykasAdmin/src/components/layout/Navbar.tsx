@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
+import { useRealtime, useRealtimeStatus } from "../../context/RealtimeContext";
 
 export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { user, logout } = useAuth();
@@ -10,25 +11,32 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  const mounted = useRef(true);
   useEffect(() => {
-    let cancelled = false;
-
-    async function poll() {
-      try {
-        const res = await api.get("/api/notifications/unread-count");
-        if (!cancelled) setUnreadCount(res.data.data.count);
-      } catch {
-        // Silent — a failed poll shouldn't disrupt the rest of the UI.
-      }
-    }
-
-    poll();
-    const interval = setInterval(poll, 30000);
+    mounted.current = true;
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      mounted.current = false;
     };
   }, []);
+
+  const fetchUnread = useCallback(async () => {
+    try {
+      const res = await api.get("/api/notifications/unread-count");
+      if (mounted.current) setUnreadCount(res.data.data.count);
+    } catch {
+      // Silent — a failed refresh shouldn't disrupt the rest of the UI.
+    }
+  }, []);
+
+  // Live: the server pushes a change whenever a notification is created or
+  // read. The slow interval is only a safety net for a dropped connection.
+  useEffect(() => {
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchUnread]);
+  useRealtime(["Notification"], fetchUnread);
+  const live = useRealtimeStatus();
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
@@ -44,6 +52,12 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
       <div className="flex-1" />
 
       <div className="flex items-center gap-3">
+        <span
+          role="status"
+          title={live ? "Live updates connected" : "Live updates reconnecting…"}
+          aria-label={live ? "Live updates connected" : "Live updates reconnecting"}
+          className={`h-2 w-2 rounded-full ${live ? "bg-green-500" : "bg-gray-300"}`}
+        />
         <button
           type="button"
           onClick={() => navigate("/notifications")}

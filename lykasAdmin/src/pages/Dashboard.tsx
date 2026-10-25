@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PawPrint, FileText, HandHeart, DollarSign, Building2 } from "lucide-react";
 import { api, getApiErrorMessage } from "../services/api";
 import { PageHeader, StatCard, Card } from "../components/ui/SharedUI";
 import { LoadingState, ErrorState } from "../components/ui/StateDisplays";
+import { useRealtime } from "../context/RealtimeContext";
 
 interface DashboardData {
   petsByStatus: { _id: string; count: number }[];
@@ -35,6 +36,15 @@ export default function Dashboard() {
       cancelled = true;
     };
   }, []);
+
+  // Live refresh: swap in fresh numbers quietly; keep the old ones on failure.
+  const refreshSilently = useCallback(() => {
+    api
+      .get("/api/dashboard")
+      .then((res) => setData(res.data.data))
+      .catch(() => {});
+  }, []);
+  useRealtime(["Pet", "Application", "Volunteer", "Payment", "Shelter", "Cage", "CageAssignment"], refreshSilently);
 
   if (loading) return <LoadingState label="Loading dashboard…" />;
   if (error || !data) return <ErrorState message={error ?? "No data"} />;

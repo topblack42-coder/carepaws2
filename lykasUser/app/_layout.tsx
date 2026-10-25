@@ -6,7 +6,9 @@ import { View, Text, ActivityIndicator } from "react-native";
 import { useFonts, Fraunces_600SemiBold } from "@expo-google-fonts/fraunces";
 import { DMSans_400Regular, DMSans_500Medium, DMSans_700Bold } from "@expo-google-fonts/dm-sans";
 import { AuthProvider, useAuth } from "../context/AuthContext";
+import { RealtimeProvider } from "../context/RealtimeContext";
 import PrimaryButton from "../components/PrimaryButton";
+import UpdateBanner from "../components/UpdateBanner";
 import colors from "../utils/colors";
 import { getRedirectTarget } from "../utils/routeGuard";
 import "../global.css";
@@ -94,12 +96,15 @@ function RootNavigation() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="onboarding" />
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="+not-found" />
-    </Stack>
+    <View className="flex-1">
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="onboarding" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="+not-found" />
+      </Stack>
+      <UpdateBanner />
+    </View>
   );
 }
 
@@ -129,8 +134,10 @@ export default function RootLayout() {
   return (
     <RootErrorBoundary>
       <AuthProvider>
-        <StatusBar style="dark" />
-        <RootNavigation />
+        <RealtimeProvider>
+          <StatusBar style="dark" />
+          <RootNavigation />
+        </RealtimeProvider>
       </AuthProvider>
     </RootErrorBoundary>
   );

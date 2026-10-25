@@ -30,6 +30,8 @@ export interface Pet {
   shelterId?: string | null;
   healthStatus?: string;
   description?: string;
+  /** True when the pet has been archived (soft-deleted); can be restored. */
+  isDeleted?: boolean;
 }
 
 /**

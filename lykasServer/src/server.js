@@ -10,6 +10,11 @@ Sentry.init({
   tracesSampleRate: 1.0,        // Capture 100% of transactions for performance monitoring
 });
 
+// Registers the real-time change feed (see utils/realtime.js). Must run
+// before any model is required, because Mongoose applies global plugins
+// when a model is compiled.
+require("./utils/realtime").installPlugin();
+
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -31,6 +36,7 @@ const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 const Message = require("./models/Message");
 const User = require("./models/User");
 const { notifyOnce } = require("./utils/notificationHelper");
+const { STAFF_ROOM } = require("./utils/realtime");
 
 const app = express();
 const server = http.createServer(app);
@@ -168,6 +174,8 @@ const io = new Server(server, {
   cors: { origin: allowedOrigins.length ? allowedOrigins : true, credentials: true },
 });
 
+require("./utils/realtime").setIo(io);
+
 io.use((socket, next) => {
   const token =
     socket.handshake.auth?.token ||
@@ -188,11 +196,13 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   const isStaff = ["staff", "admin", "super_admin"].includes(socket.userRole);
 
-  // Non-staff auto-join their own private room; staff must explicitly
-  // emit joinAdmin (e.g. when the admin chat console mounts) — matches
-  // the real source behavior rather than auto-joining staff on connect.
-  if (!isStaff) {
-    socket.join(socket.userId);
+  // Every socket joins its own private room (chat delivery for users, and
+  // owner-targeted "data:changed" events for everyone). Staff additionally
+  // join staff_room so they receive every data change; they still must
+  // explicitly emit joinAdmin to receive chat traffic (admin_room).
+  socket.join(String(socket.userId));
+  if (isStaff) {
+    socket.join(STAFF_ROOM);
   }
 
   socket.on("joinAdmin", () => {

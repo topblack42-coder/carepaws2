@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { useFocusEffect } from "expo-router";
 import { View, Text, FlatList, Pressable } from "react-native";
 import { router } from "expo-router";
@@ -16,17 +17,24 @@ export default function MyApplicationsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       setApplications(await fetchMyApplications());
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load your applications"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load your applications"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [live]);
+
+  useRealtimeReload(["Application", "Pet"], load, live);
 
   useFocusEffect(
     useCallback(() => {

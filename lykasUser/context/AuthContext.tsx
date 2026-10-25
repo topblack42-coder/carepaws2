@@ -159,7 +159,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = useCallback(async () => {
     const res = await api.get("/api/auth/me");
-    setUser(res.data.data.user);
+    const next: AppUser = res.data.data.user;
+    // Keep the same object when nothing changed so live refreshes (see
+    // RealtimeContext) don't re-trigger every effect that depends on `user`.
+    setUser((prev) => (prev && JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
   }, []);
 
   // Auto-register this device for push as soon as a user is signed in

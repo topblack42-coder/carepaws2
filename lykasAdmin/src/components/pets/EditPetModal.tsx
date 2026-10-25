@@ -3,8 +3,8 @@ import Modal from "../ui/Modal";
 import Button from "../ui/Button";
 import Alert from "../ui/Alert";
 import { FormField, Input, Select } from "../ui/FormUI";
-import TextArea from "../ui/TextArea";
 import PetVideoField from "./PetVideoField";
+import { PetFields, PhotoField, appendPetFields, emptyPetForm, petToForm, type PetFormValues, type ShelterOption } from "./PetFields";
 import type { Pet } from "../../hooks/usePets";
 
 interface EditPetModalProps {
@@ -12,14 +12,14 @@ interface EditPetModalProps {
   onClose: () => void;
   onSubmit: (id: string, formData: FormData) => Promise<boolean>;
   onRemoveVideo?: (id: string) => Promise<boolean>;
+  shelters?: ShelterOption[];
   mutating: boolean;
   mutationError: string | null;
 }
 
-export default function EditPetModal({ pet, onClose, onSubmit, onRemoveVideo, mutating, mutationError }: EditPetModalProps) {
-  const [name, setName] = useState("");
+export default function EditPetModal({ pet, onClose, onSubmit, onRemoveVideo, shelters, mutating, mutationError }: EditPetModalProps) {
+  const [values, setValues] = useState<PetFormValues>(emptyPetForm);
   const [status, setStatus] = useState("Available");
-  const [description, setDescription] = useState("");
   const [healthStatus, setHealthStatus] = useState("");
   const [image, setImage] = useState<File | null>(null);
   const [video, setVideo] = useState<File | null>(null);
@@ -27,9 +27,8 @@ export default function EditPetModal({ pet, onClose, onSubmit, onRemoveVideo, mu
 
   useEffect(() => {
     if (pet) {
-      setName(pet.name);
+      setValues(petToForm(pet));
       setStatus(pet.status);
-      setDescription(pet.description ?? "");
       setHealthStatus(pet.healthStatus ?? "");
       setImage(null);
       setVideo(null);
@@ -44,9 +43,8 @@ export default function EditPetModal({ pet, onClose, onSubmit, onRemoveVideo, mu
     if (!pet) return;
 
     const formData = new FormData();
-    formData.append("name", name);
+    appendPetFields(formData, values, { sendBlankText: true });
     formData.append("status", status);
-    formData.append("description", description);
     formData.append("healthStatus", healthStatus);
     if (image) formData.append("image", image);
     // Only sent when the admin picked a new video; leaving it out keeps the current one.
@@ -79,36 +77,30 @@ export default function EditPetModal({ pet, onClose, onSubmit, onRemoveVideo, mu
           </div>
         )}
 
-        <FormField label="Name" htmlFor="edit-pet-name">
-          <Input id="edit-pet-name" required value={name} onChange={(e) => setName(e.target.value)} />
-        </FormField>
+        <PetFields idPrefix="edit-pet" values={values} onChange={(patch) => setValues((v) => ({ ...v, ...patch }))} shelters={shelters} />
 
-        <FormField label="Status" htmlFor="edit-pet-status">
-          <Select id="edit-pet-status" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="Available">Available</option>
-            <option value="Pending">Pending</option>
-            <option value="Adopted">Adopted</option>
-            <option value="Foster">Foster</option>
-          </Select>
-        </FormField>
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="Status" htmlFor="edit-pet-status">
+            <Select id="edit-pet-status" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="Available">Available</option>
+              <option value="Pending">Pending</option>
+              <option value="Adopted">Adopted</option>
+              <option value="Foster">Foster</option>
+            </Select>
+          </FormField>
+          <FormField label="Health status (optional)" htmlFor="edit-pet-health">
+            <Input id="edit-pet-health" value={healthStatus} onChange={(e) => setHealthStatus(e.target.value)} />
+          </FormField>
+        </div>
 
-        <FormField label="Health status" htmlFor="edit-pet-health">
-          <Input id="edit-pet-health" value={healthStatus} onChange={(e) => setHealthStatus(e.target.value)} />
-        </FormField>
-
-        <FormField label="Description" htmlFor="edit-pet-description">
-          <TextArea id="edit-pet-description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </FormField>
-
-        <FormField label="Replace photo" htmlFor="edit-pet-image">
-          <input
-            id="edit-pet-image"
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            onChange={(e) => setImage(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-gray-200"
-          />
-        </FormField>
+        <PhotoField
+          idPrefix="edit-pet"
+          label="Replace photo (optional)"
+          file={image}
+          onFileChange={setImage}
+          currentUrl={pet.imageUrl ?? null}
+          petName={pet.name}
+        />
 
         <PetVideoField
           idPrefix="edit-pet"

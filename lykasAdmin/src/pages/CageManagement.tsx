@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Plus, Pencil, UserMinus } from "lucide-react";
 import { api, getApiErrorMessage } from "../services/api";
 import { PageHeader, Card } from "../components/ui/SharedUI";
@@ -9,6 +9,7 @@ import Modal from "../components/ui/Modal";
 import Alert from "../components/ui/Alert";
 import StatusBadge from "../components/ui/StatusBadge";
 import { useToast } from "../context/ToastContext";
+import { useRealtime } from "../context/RealtimeContext";
 
 interface Shelter { _id: string; name: string; status: string; }
 interface Pet { _id: string; name: string; species: "Dog" | "Cat" | "Other"; }
@@ -49,8 +50,13 @@ export default function CageManagement() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Live refreshes reuse load() but skip the spinner / error banner.
+  const silentRef = useRef(false);
+
   async function load() {
-    setLoading(true); setError(null);
+    const silent = silentRef.current;
+    silentRef.current = false;
+    if (!silent) { setLoading(true); setError(null); }
     try {
       const [cageRes, shelterRes, assignRes] = await Promise.all([
         api.get("/api/shelter-care/cage-definitions"),
@@ -60,11 +66,17 @@ export default function CageManagement() {
       setCages(cageRes.data.data ?? []);
       setShelters(shelterRes.data.data ?? []);
       setAssignments(assignRes.data.data ?? []);
-    } catch (err) { setError(getApiErrorMessage(err, "Failed to load cage management data")); }
+    } catch (err) { if (!silent) setError(getApiErrorMessage(err, "Failed to load cage management data")); }
     finally { setLoading(false); }
   }
 
   useEffect(() => { load(); }, []);
+
+  const refreshSilently = useCallback(() => {
+    silentRef.current = true;
+    void load();
+  }, []);
+  useRealtime(["Cage", "CageAssignment", "Shelter", "QuarantinePeriod", "Pet"], refreshSilently);
 
   function openCreate() {
     setEditing(null); setForm({ ...initialForm, shelterId: shelters[0]?._id ?? "" }); setSaveError(null); setModalOpen(true);

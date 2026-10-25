@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Syringe, Stethoscope, BookHeart, Plus, ShieldAlert, Utensils, Activity, BedDouble } from "lucide-react";
 import { api, getApiErrorMessage } from "../services/api";
 import { usePets } from "../hooks/usePets";
+import { useRealtime } from "../context/RealtimeContext";
 import { PageHeader, Card } from "../components/ui/SharedUI";
 import { LoadingState, ErrorState, EmptyState } from "../components/ui/StateDisplays";
 import { Input, Select, FormField } from "../components/ui/FormUI";
@@ -107,11 +108,18 @@ export default function Health() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [availableCages, setAvailableCages] = useState<{ _id: string; cageNumber: string; section?: string; capacity: number; currentOccupancy: number; quarantineOnly: boolean }[]>([]);
 
+  // Live refreshes reuse load() but skip the spinner / error banner.
+  const silentRef = useRef(false);
+
   const load = useCallback(() => {
     if (!petId) return;
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const silent = silentRef.current;
+    silentRef.current = false;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     Promise.all([
       api.get(`/api/medical/summary/${petId}`),
       api.get(`/api/baby-book/${petId}`),
@@ -124,7 +132,7 @@ export default function Health() {
         setCareSummary(careRes.data.data);
       })
       .catch((err) => {
-        if (!cancelled) setError(getApiErrorMessage(err, "Failed to load health records"));
+        if (!cancelled && !silent) setError(getApiErrorMessage(err, "Failed to load health records"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -137,6 +145,15 @@ export default function Health() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const refreshSilently = useCallback(() => {
+    silentRef.current = true;
+    load();
+  }, [load]);
+  useRealtime(
+    ["Vaccination", "VetVisit", "GeneralMedicalRecord", "HealthCheck", "FeedingLog", "BehavioralObservation", "BabyBook", "CageAssignment", "QuarantinePeriod", "Pet"],
+    refreshSilently
+  );
 
   function openAdd(type: RecordType) {
     setRecordType(type);

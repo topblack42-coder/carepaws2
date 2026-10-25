@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { lazy, Suspense } from "react";
 import { Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { RealtimeProvider } from "./context/RealtimeContext";
 import { ToastProvider } from "./context/ToastContext";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import AppLayout from "./components/layout/AppLayout";
@@ -83,6 +84,7 @@ function Protected({ children, roles }: { children: ReactNode; roles?: ("staff" 
 export default function App() {
   return (
     <AuthProvider>
+      <RealtimeProvider>
       <ToastProvider>
         <Routes>
           {/* Auth — unauthenticated */}
@@ -178,6 +180,7 @@ export default function App() {
           />
         </Routes>
       </ToastProvider>
+      </RealtimeProvider>
     </AuthProvider>
   );
 }

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,19 +34,26 @@ export default function ApplicationDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await api.get(`/api/applications/${id}`);
       setApplication(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load this application"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load this application"));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [live, id]);
+
+  useRealtimeReload(["Application", "Interview", "HomeVisit", "RiskAssessment", "Payment", "UserDocument"], load, live);
 
   useFocusEffect(
     useCallback(() => {

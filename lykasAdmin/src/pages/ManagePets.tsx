@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Plus, Pencil, Archive } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Plus, Pencil, Archive, RotateCcw } from "lucide-react";
 import { usePets, type Pet } from "../hooks/usePets";
 import { PageHeader } from "../components/ui/SharedUI";
 import Button from "../components/ui/Button";
@@ -8,6 +8,8 @@ import StatusBadge from "../components/ui/StatusBadge";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import AddPetModal from "../components/pets/AddPetModal";
 import EditPetModal from "../components/pets/EditPetModal";
+import type { ShelterOption } from "../components/pets/PetFields";
+import { api } from "../services/api";
 import { useToast } from "../context/ToastContext";
 
 export default function ManagePets() {
@@ -16,19 +18,47 @@ export default function ManagePets() {
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<Pet | null>(null);
   const [archiving, setArchiving] = useState<Pet | null>(null);
+  const [shelters, setShelters] = useState<ShelterOption[]>([]);
+
+  // Shelter choices for the Add/Edit forms. Optional — the forms still work if this fails.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/api/shelters", { params: { limit: "100" } })
+      .then((res) => {
+        if (!cancelled) setShelters((res.data?.data ?? []).map((s: ShelterOption) => ({ _id: s._id, name: s.name })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const columns: Column<Pet>[] = [
-    { key: "name", header: "Name", accessor: (p) => <span className="font-medium text-gray-900">{p.name}</span> },
+    {
+      key: "name",
+      header: "Name",
+      accessor: (p) => (
+        <span className="flex items-center gap-3">
+          {p.imageUrl ? (
+            <img src={p.imageUrl} alt="" className="h-9 w-9 rounded-lg object-cover" />
+          ) : (
+            <span className="h-9 w-9 rounded-lg bg-gray-100" aria-hidden="true" />
+          )}
+          <span className="font-medium text-gray-900">{p.name}</span>
+        </span>
+      ),
+    },
     { key: "species", header: "Species", accessor: (p) => p.species },
     { key: "breed", header: "Breed", accessor: (p) => p.breed || "—" },
-    { key: "status", header: "Status", accessor: (p) => <StatusBadge status={p.status} /> },
+    { key: "status", header: "Status", accessor: (p) => <StatusBadge status={p.isDeleted ? "archived" : p.status} /> },
   ];
 
   return (
     <div>
       <PageHeader
         title="Manage Pets"
-        description="Add, edit, and archive pets in the shelter's catalog."
+        description="Add, edit, archive, and restore pets in the shelter's catalog."
         actions={
           <Button onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -78,14 +108,31 @@ export default function ManagePets() {
             >
               <Pencil className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => setArchiving(pet)}
-              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
-              aria-label={`Archive ${pet.name}`}
-            >
-              <Archive className="h-4 w-4" />
-            </button>
+            {pet.isDeleted ? (
+              <button
+                type="button"
+                disabled={pets.mutating}
+                onClick={async () => {
+                  const ok = await pets.restorePet(pet._id);
+                  if (ok) showToast("Pet restored", "success");
+                }}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                aria-label={`Restore ${pet.name}`}
+                title="Restore"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setArchiving(pet)}
+                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
+                aria-label={`Archive ${pet.name}`}
+                title="Archive"
+              >
+                <Archive className="h-4 w-4" />
+              </button>
+            )}
           </div>
         )}
       />
@@ -98,6 +145,7 @@ export default function ManagePets() {
           if (ok) showToast("Pet added", "success");
           return ok;
         }}
+        shelters={shelters}
         mutating={pets.mutating}
         mutationError={pets.mutationError}
       />
@@ -115,6 +163,7 @@ export default function ManagePets() {
           if (ok) showToast("Video removed", "success");
           return ok;
         }}
+        shelters={shelters}
         mutating={pets.mutating}
         mutationError={pets.mutationError}
       />

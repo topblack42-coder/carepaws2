@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { View, Text, ScrollView, Pressable } from "react-native";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
@@ -44,26 +45,34 @@ export default function PetDetailScreen() {
   // video) can never appear on another pet's page.
   const requestRef = useRef(0);
 
+  const live = useSilentFlag();
+  const signedIn = !!user;
+
   const load = useCallback(async () => {
     if (!id) return;
     const request = ++requestRef.current;
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [petRes, favoritesRes] = await Promise.all([
         api.get(`/api/pets/${id}`),
-        user ? api.get("/api/auth/favorites") : Promise.resolve({ data: { data: [] } }),
+        signedIn ? api.get("/api/auth/favorites") : Promise.resolve({ data: { data: [] } }),
       ]);
       if (request !== requestRef.current) return;
       setPet(petRes.data.data);
       setIsFavorite(favoritesRes.data.data.some((favPet: { _id: string }) => favPet._id === id));
     } catch (err) {
       if (request !== requestRef.current) return;
-      setError(getApiErrorMessage(err, "Failed to load this pet"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load this pet"));
     } finally {
       if (request === requestRef.current) setLoading(false);
     }
-  }, [id, user]);
+  }, [live, id, signedIn]);
+
+  useRealtimeReload(["Pet"], load, live);
 
   useEffect(() => {
     load();

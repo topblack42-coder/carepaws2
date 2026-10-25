@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../context/RealtimeContext";
 import { View, Text, FlatList, Pressable, Alert } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,18 +14,25 @@ export default function MyAppointmentsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await api.get("/api/appointments/my-appointments");
       setAppointments(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load your appointments"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load your appointments"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [live]);
+
+  useRealtimeReload(["Appointment"], load, live);
 
   useEffect(() => {
     load();

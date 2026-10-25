@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, getApiErrorMessage } from "../services/api";
+import { useRealtime } from "../context/RealtimeContext";
+import { resourcesForEndpoint } from "../services/realtimeResources";
 
 interface Pagination {
   total: number;
@@ -14,7 +16,11 @@ interface Pagination {
  * buildListQuery/buildPagination contract — the same q/filterFields/page/
  * limit params every list endpoint understands.
  */
-export function useResourceList<T>(endpoint: string, extraParams: Record<string, string> = {}) {
+export function useResourceList<T>(
+  endpoint: string,
+  extraParams: Record<string, string> = {},
+  options: { resources?: readonly string[] } = {}
+) {
   const [rows, setRows] = useState<T[]>([]);
   const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, limit: 20, pages: 1 });
   const [search, setSearch] = useState("");
@@ -26,10 +32,24 @@ export function useResourceList<T>(endpoint: string, extraParams: Record<string,
 
   const reload = useCallback(() => setReloadToken((t) => t + 1), []);
 
+  // Live updates: refetch in the background when the server reports a change
+  // to anything this list shows. "Silent" = keep current rows on screen, no
+  // spinner, and don't replace them with an error if the refetch fails.
+  const silentRef = useRef(false);
+  const refreshSilently = useCallback(() => {
+    silentRef.current = true;
+    setReloadToken((t) => t + 1);
+  }, []);
+  useRealtime(options.resources ?? resourcesForEndpoint(endpoint), refreshSilently);
+
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const silent = silentRef.current;
+    silentRef.current = false;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
 
     const params: Record<string, string> = { page: String(page), limit: "20", ...extraParams };
     if (search) params.q = search;
@@ -50,7 +70,7 @@ export function useResourceList<T>(endpoint: string, extraParams: Record<string,
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(getApiErrorMessage(err, "Failed to load data"));
+        if (!cancelled && !silent) setError(getApiErrorMessage(err, "Failed to load data"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, getApiErrorMessage } from "../services/api";
 import { PageHeader, StatCard, Card } from "../components/ui/SharedUI";
 import { LoadingState, ErrorState } from "../components/ui/StateDisplays";
+import { useRealtime } from "../context/RealtimeContext";
 
 interface Overview {
   totalPets: number;
@@ -36,6 +37,17 @@ export default function Analytics() {
       .catch((err) => setError(getApiErrorMessage(err, "Failed to load analytics")))
       .finally(() => setLoading(false));
   }, []);
+
+  const refreshSilently = useCallback(() => {
+    Promise.all([api.get("/api/analytics/overview"), api.get("/api/analytics/trends"), api.get("/api/analytics/pets-breakdown")])
+      .then(([overviewRes, trendsRes, breakdownRes]) => {
+        setOverview(overviewRes.data.data);
+        setTrends(trendsRes.data.data);
+        setBreakdown(breakdownRes.data.data);
+      })
+      .catch(() => {});
+  }, []);
+  useRealtime(["Pet", "Application", "Payment", "Volunteer", "Foster"], refreshSilently);
 
   if (loading) return <LoadingState />;
   if (error || !overview) return <ErrorState message={error ?? "No data"} />;

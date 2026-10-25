@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useRealtime } from "../context/RealtimeContext";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, ChevronRight, Clock, PawPrint, Phone, XCircle } from "lucide-react";
 import { api, getApiErrorMessage } from "../services/api";
@@ -95,15 +96,23 @@ export default function ApplicationDetails() {
   const cameFromList = (location.state as { fromList?: boolean } | null)?.fromList === true;
   const goBack = () => (cameFromList ? navigate(-1) : navigate("/adoptions"));
 
+  // A live refresh swaps the data in place: no spinner, and a failed
+  // background fetch keeps what is already on screen.
+  const silentRef = useRef(false);
+
   const load = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
-    setError(null);
+    const silent = silentRef.current;
+    silentRef.current = false;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await api.get(`/api/applications/${id}`);
       setApplication(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load application"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load application"));
     } finally {
       setLoading(false);
     }
@@ -112,6 +121,12 @@ export default function ApplicationDetails() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const refreshSilently = useCallback(() => {
+    silentRef.current = true;
+    void load();
+  }, [load]);
+  useRealtime(["Application", "Interview", "HomeVisit", "RiskAssessment", "UserDocument", "Note", "Payment", "Pet"], refreshSilently);
 
   /** Moves exactly one pipeline stage. Final decisions never go through here. */
   async function advanceStage(stage: ApplicationStage, note: string): Promise<string | null> {

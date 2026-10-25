@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtime, useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { View, Text, ScrollView, RefreshControl, FlatList, Pressable } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -30,17 +31,22 @@ export default function HomeScreen() {
   const [appsError, setAppsError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Live refreshes keep what is on screen: no error banner if they fail.
+  const livePets = useSilentFlag();
+  const liveApps = useSilentFlag();
+
   const loadPets = useCallback(async () => {
-    setPetsError(null);
+    const silent = livePets.take();
+    if (!silent) setPetsError(null);
     try {
       const res = await api.get("/api/pets", { params: { limit: 6, status: "Available" } });
       setPets(res.data.data);
     } catch (err) {
-      setPetsError(getApiErrorMessage(err, "Failed to load pets"));
+      if (!silent) setPetsError(getApiErrorMessage(err, "Failed to load pets"));
     } finally {
       setPetsLoading(false);
     }
-  }, []);
+  }, [livePets]);
 
   const loadAnnouncements = useCallback(async () => {
     try {
@@ -52,15 +58,22 @@ export default function HomeScreen() {
   }, []);
 
   const loadApplications = useCallback(async () => {
-    setAppsError(null);
+    const silent = liveApps.take();
+    if (!silent) setAppsError(null);
     try {
       setApplications(await fetchMyApplications());
     } catch (err) {
-      setAppsError(getApiErrorMessage(err, "Failed to load your applications"));
+      if (!silent) setAppsError(getApiErrorMessage(err, "Failed to load your applications"));
     } finally {
       setAppsLoading(false);
     }
-  }, []);
+  }, [liveApps]);
+
+  useRealtimeReload(["Pet"], loadPets, livePets);
+  useRealtimeReload(["Application"], loadApplications, liveApps);
+  useRealtime(["Announcement"], () => {
+    void loadAnnouncements();
+  });
 
   const retryApplications = useCallback(() => {
     setAppsLoading(true);

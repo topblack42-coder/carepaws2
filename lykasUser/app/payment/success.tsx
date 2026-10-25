@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtime } from "../../context/RealtimeContext";
 import { View, Text } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -29,6 +30,12 @@ export default function PaymentSuccessScreen() {
     const timer = setInterval(load, 3000);
     return () => clearInterval(timer);
   }, [load]);
+
+  // The server pushes the moment the webhook marks the payment paid; the
+  // poll above stays as a fallback.
+  useRealtime(["Payment"], () => {
+    void load();
+  });
 
   if (error) return <SafeAreaView className="flex-1 bg-cream"><StateView state="error" message={error} onRetry={load} /></SafeAreaView>;
 

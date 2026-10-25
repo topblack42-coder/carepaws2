@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../context/RealtimeContext";
 import { View, Text, FlatList, Pressable, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,18 +34,25 @@ export default function DocumentsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await api.get("/api/documents/my");
       setDocuments(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load your documents"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load your documents"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [live]);
+
+  useRealtimeReload(["UserDocument"], load, live);
 
   useEffect(() => {
     load();

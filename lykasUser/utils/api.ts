@@ -1,7 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import * as SecureStore from "expo-secure-store";
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || "http://localhost:5000";
 
 export interface ApiErrorShape {
   success: false;

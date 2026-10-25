@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { View, Text, FlatList } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -11,18 +12,25 @@ export default function FavoritesScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await api.get("/api/auth/favorites");
       setPets(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load favorites"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load favorites"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [live]);
+
+  useRealtimeReload(["User", "Pet"], load, live);
 
   // Reload whenever the tab regains focus (a pet may have been
   // favorited/unfavorited from its detail screen).

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { View, Text, FlatList, Pressable, TextInput, ScrollView } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -18,9 +19,14 @@ export default function AdoptScreen() {
   const [species, setSpecies] = useState("All");
   const [compareIds, setCompareIds] = useState<string[]>([]);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const params: Record<string, string> = { status: "Available", limit: "50" };
       if (search) params.q = search;
@@ -28,11 +34,13 @@ export default function AdoptScreen() {
       const res = await api.get("/api/pets", { params });
       setPets(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load pets"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load pets"));
     } finally {
       setLoading(false);
     }
-  }, [search, species]);
+  }, [live, search, species]);
+
+  useRealtimeReload(["Pet"], load, live);
 
   useEffect(() => {
     const timeout = setTimeout(load, 300); // debounce search

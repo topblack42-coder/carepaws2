@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../context/RealtimeContext";
 import { View, Text, FlatList, Pressable, RefreshControl } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,18 +22,25 @@ export default function NotificationsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await api.get("/api/notifications/my");
       setNotifications(res.data.data);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load notifications"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load notifications"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [live]);
+
+  useRealtimeReload(["Notification"], load, live);
 
   useEffect(() => {
     load();

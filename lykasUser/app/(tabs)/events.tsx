@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useRealtimeReload, useSilentFlag } from "../../context/RealtimeContext";
 import { View, Text, FlatList, Pressable, Alert } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -32,9 +33,14 @@ export default function EventsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [busyEvent, setBusyEvent] = useState<string | null>(null);
 
+  const live = useSilentFlag();
+
   const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    const silent = live.take();
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [eventsRes, registrationsRes] = await Promise.all([
         api.get("/api/events", { params: { status: "upcoming" } }),
@@ -48,11 +54,13 @@ export default function EventsScreen() {
       }
       setRegistrations(active);
     } catch (err) {
-      setError(getApiErrorMessage(err, "Failed to load events"));
+      if (!silent) setError(getApiErrorMessage(err, "Failed to load events"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [live]);
+
+  useRealtimeReload(["Event", "EventRegistration"], load, live);
 
   useEffect(() => {
     load();
