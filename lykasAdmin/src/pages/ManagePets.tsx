@@ -11,6 +11,7 @@ import EditPetModal from "../components/pets/EditPetModal";
 import type { ShelterOption } from "../components/pets/PetFields";
 import { api } from "../services/api";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 export default function ManagePets() {
   const pets = usePets();
@@ -100,38 +101,20 @@ export default function ManagePets() {
         onPageChange={pets.setPage}
         rowActions={(pet) => (
           <div className="flex justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => setEditing(pet)}
-              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
-              aria-label={`Edit ${pet.name}`}
-            >
+            <IconButton label={`Edit ${pet.name}`} onClick={() => setEditing(pet)}>
               <Pencil className="h-4 w-4" />
-            </button>
+            </IconButton>
             {pet.isDeleted ? (
-              <button
-                type="button"
-                disabled={pets.mutating}
-                onClick={async () => {
+              <IconButton label={`Restore ${pet.name}`} disabled={pets.mutating} onClick={async () => {
                   const ok = await pets.restorePet(pet._id);
                   if (ok) showToast("Pet restored", "success");
-                }}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-                aria-label={`Restore ${pet.name}`}
-                title="Restore"
-              >
+                }}>
                 <RotateCcw className="h-4 w-4" />
-              </button>
+              </IconButton>
             ) : (
-              <button
-                type="button"
-                onClick={() => setArchiving(pet)}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
-                aria-label={`Archive ${pet.name}`}
-                title="Archive"
-              >
+              <IconButton label={`Archive ${pet.name}`} onClick={() => setArchiving(pet)}>
                 <Archive className="h-4 w-4" />
-              </button>
+              </IconButton>
             )}
           </div>
         )}

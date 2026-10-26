@@ -42,7 +42,7 @@ export default function Login() {
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <PawPrint className="h-6 w-6 text-primary" aria-hidden="true" />
           </div>
-          <h1 className="text-lg font-semibold text-gray-900">CarePaws Admin</h1>
+          <h1 className="text-xl font-semibold text-gray-900">CarePaws Admin</h1>
           <p className="text-sm text-gray-500">Sign in to manage the shelter</p>
         </div>
 

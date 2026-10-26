@@ -60,8 +60,8 @@ const NOT_PROVIDED = "Not provided";
 
 const CHIP_TONES = {
   success: "bg-status-successBg text-status-success",
-  warning: "bg-amber-100 text-amber-900",
-  danger: "bg-red-100 text-red-800",
+  warning: "bg-status-warningBg text-status-warning",
+  danger: "bg-status-dangerBg text-status-danger",
   neutral: "bg-gray-100 text-gray-800",
 } as const;
 
@@ -302,7 +302,7 @@ export default function ApplicationDetails() {
           <Card className="order-1 lg:order-none">
             <h2 className="mb-4 text-base font-semibold text-gray-900">Pipeline</h2>
             {rejected && (
-              <div className="mb-4 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-red-900">
+              <div className="mb-4 flex items-start gap-3 rounded-lg border border-status-danger/30 bg-status-dangerBg p-3 text-gray-900">
                 <XCircle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
                 <div className="text-sm">
                   <p className="font-semibold">

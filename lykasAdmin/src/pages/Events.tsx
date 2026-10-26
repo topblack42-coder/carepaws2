@@ -7,10 +7,12 @@ import DataTable, { type Column } from "../components/ui/DataTable";
 import StatusBadge from "../components/ui/StatusBadge";
 import Button from "../components/ui/Button";
 import Modal from "../components/ui/Modal";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import Alert from "../components/ui/Alert";
 import { FormField, Input, Select } from "../components/ui/FormUI";
 import TextArea from "../components/ui/TextArea";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 interface EventRow {
   _id: string;
@@ -44,6 +46,8 @@ export default function Events() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<EventRow | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   function openCreate() {
     setForm(EMPTY_FORM);
@@ -109,14 +113,18 @@ export default function Events() {
     }
   }
 
-  async function cancelEvent(event: EventRow) {
-    if (!window.confirm(`Cancel "${event.title}"? Registrations and attendance history will be preserved.`)) return;
+  async function confirmCancelEvent() {
+    if (!cancelling) return;
+    setCancelBusy(true);
     try {
-      await api.delete(`/api/events/${event._id}`);
+      await api.delete(`/api/events/${cancelling._id}`);
       showToast("Event cancelled", "success");
+      setCancelling(null);
       list.reload();
     } catch (err) {
       showToast(getApiErrorMessage(err, "Failed to cancel event"), "error");
+    } finally {
+      setCancelBusy(false);
     }
   }
 
@@ -159,13 +167,13 @@ export default function Events() {
         onPageChange={list.setPage}
         rowActions={(event) => (
           <div className="flex justify-end gap-1">
-            <button type="button" onClick={() => openEdit(event)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Edit event">
+            <IconButton label="Edit event" onClick={() => openEdit(event)}>
               <Pencil className="h-4 w-4" />
-            </button>
+            </IconButton>
             {event.status !== "cancelled" && event.status !== "completed" && (
-              <button type="button" onClick={() => cancelEvent(event)} className="rounded-lg p-1.5 text-red-500 hover:bg-red-50" aria-label="Cancel event">
+              <IconButton label="Cancel event" tone="danger" onClick={() => setCancelling(event)}>
                 <XCircle className="h-4 w-4" />
-              </button>
+              </IconButton>
             )}
           </div>
         )}
@@ -226,6 +234,16 @@ export default function Events() {
           </FormField>
         </form>
       </Modal>
+      <ConfirmModal
+        isOpen={cancelling !== null}
+        title="Cancel event"
+        message={`Cancel "${cancelling?.title ?? ""}"? Registrations and attendance history will be preserved.`}
+        confirmLabel="Cancel event"
+        variant="danger"
+        loading={cancelBusy}
+        onConfirm={confirmCancelEvent}
+        onCancel={() => setCancelling(null)}
+      />
     </div>
   );
 }

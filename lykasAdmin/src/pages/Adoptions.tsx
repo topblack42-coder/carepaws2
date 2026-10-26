@@ -8,6 +8,7 @@ import StatusBadge from "../components/ui/StatusBadge";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import Button from "../components/ui/Button";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 const STAGE_LABELS: Record<string, string> = {
   submitted: "Submitted",
@@ -72,32 +73,17 @@ export default function Adoptions() {
         onPageChange={applications.setPage}
         rowActions={(app) => (
           <div className="flex justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => navigate(`/adoptions/${app._id}`, { state: { fromList: true } })}
-              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
-              aria-label={`View application from ${app.applicant?.displayName}`}
-            >
+            <IconButton label={`View application from ${app.applicant?.displayName}`} onClick={() => navigate(`/adoptions/${app._id}`, { state: { fromList: true } })}>
               <Eye className="h-4 w-4" />
-            </button>
+            </IconButton>
             {app.status === "pending" && app.stage === "risk_assessment" && (
               <>
-                <button
-                  type="button"
-                  onClick={() => setConfirming({ app, action: "approved" })}
-                  className="rounded-lg p-1.5 text-status-success hover:bg-status-successBg"
-                  aria-label="Approve"
-                >
+                <IconButton label="Approve" tone="success" onClick={() => setConfirming({ app, action: "approved" })}>
                   <CheckCircle2 className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirming({ app, action: "rejected" })}
-                  className="rounded-lg p-1.5 text-status-danger hover:bg-status-dangerBg"
-                  aria-label="Reject"
-                >
+                </IconButton>
+                <IconButton label="Reject" tone="danger" onClick={() => setConfirming({ app, action: "rejected" })}>
                   <XCircle className="h-4 w-4" />
-                </button>
+                </IconButton>
               </>
             )}
           </div>

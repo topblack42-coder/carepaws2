@@ -9,6 +9,7 @@ import Modal from "../components/ui/Modal";
 import Button from "../components/ui/Button";
 import TextArea from "../components/ui/TextArea";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 interface UserDocument {
   _id: string;
@@ -100,24 +101,12 @@ export default function DocumentReview() {
         rowActions={(d) =>
           d.status === "pending" ? (
             <div className="flex justify-end gap-1">
-              <button
-                type="button"
-                disabled={actingOn === d._id}
-                onClick={() => verify(d, "verified")}
-                className="rounded-lg p-1.5 text-status-success hover:bg-status-successBg disabled:opacity-50"
-                aria-label="Verify document"
-              >
+              <IconButton label="Verify document" tone="success" disabled={actingOn === d._id} onClick={() => verify(d, "verified")}>
                 <CheckCircle2 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                disabled={actingOn === d._id}
-                onClick={() => openRejectModal(d)}
-                className="rounded-lg p-1.5 text-status-danger hover:bg-status-dangerBg disabled:opacity-50"
-                aria-label="Reject document"
-              >
+              </IconButton>
+              <IconButton label="Reject document" tone="danger" disabled={actingOn === d._id} onClick={() => openRejectModal(d)}>
                 <XCircle className="h-4 w-4" />
-              </button>
+              </IconButton>
             </div>
           ) : null
         }

@@ -18,7 +18,7 @@ export default function StageTimeline({ history }: { history: StageHistoryEntry[
               <span
                 aria-hidden="true"
                 className={`absolute -left-[7px] top-1.5 h-3 w-3 rounded-full border-2 border-white ${
-                  entry.stage === "rejected" ? "bg-red-700" : index === 0 ? "bg-primary" : "bg-gray-400"
+                  entry.stage === "rejected" ? "bg-status-danger" : index === 0 ? "bg-primary" : "bg-gray-400"
                 }`}
               />
               <p className="text-sm font-semibold text-gray-900">{stageLabel(entry.stage)}</p>

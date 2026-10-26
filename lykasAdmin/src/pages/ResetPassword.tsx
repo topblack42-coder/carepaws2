@@ -46,7 +46,7 @@ export default function ResetPassword() {
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
             <PawPrint className="h-6 w-6 text-primary" aria-hidden="true" />
           </div>
-          <h1 className="text-lg font-semibold text-gray-900">Choose a new password</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Choose a new password</h1>
         </div>
 
         <div className="animate-in rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

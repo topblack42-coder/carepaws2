@@ -14,7 +14,7 @@ const MARKER_CLASSES: Record<StepState, string> = {
   current: "border-primary bg-primary text-white ring-4 ring-primary/20",
   next: "border-primary bg-white text-primary",
   upcoming: "border-gray-300 bg-white text-gray-600",
-  stopped: "border-red-700 bg-red-700 text-white",
+  stopped: "border-status-danger bg-status-danger text-white",
 };
 
 const TEXT_CLASSES: Record<StepState, string> = {
@@ -22,7 +22,7 @@ const TEXT_CLASSES: Record<StepState, string> = {
   current: "font-semibold text-gray-900",
   next: "text-gray-900",
   upcoming: "text-gray-600",
-  stopped: "font-semibold text-red-800",
+  stopped: "font-semibold text-status-danger",
 };
 
 /** Read-only, ordered view of the pipeline: vertical on small screens, horizontal from lg. */

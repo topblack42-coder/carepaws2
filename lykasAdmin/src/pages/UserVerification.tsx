@@ -6,6 +6,7 @@ import { PageHeader } from "../components/ui/SharedUI";
 import DataTable, { type Column } from "../components/ui/DataTable";
 import StatusBadge from "../components/ui/StatusBadge";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 interface VerificationRow {
   _id: string;
@@ -76,24 +77,12 @@ export default function UserVerification() {
         onPageChange={list.setPage}
         rowActions={(u) => (
           <div className="flex justify-end gap-1">
-            <button
-              type="button"
-              disabled={actingOn === u._id}
-              onClick={() => decide(u, "verified")}
-              className="rounded-lg p-1.5 text-status-success hover:bg-status-successBg disabled:opacity-50"
-              aria-label="Verify identity"
-            >
+            <IconButton label="Verify identity" tone="success" disabled={actingOn === u._id} onClick={() => decide(u, "verified")}>
               <CheckCircle2 className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              disabled={actingOn === u._id}
-              onClick={() => decide(u, "rejected")}
-              className="rounded-lg p-1.5 text-status-danger hover:bg-status-dangerBg disabled:opacity-50"
-              aria-label="Reject identity"
-            >
+            </IconButton>
+            <IconButton label="Reject identity" tone="danger" disabled={actingOn === u._id} onClick={() => decide(u, "rejected")}>
               <XCircle className="h-4 w-4" />
-            </button>
+            </IconButton>
           </div>
         )}
       />

@@ -4,6 +4,7 @@ import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { api } from "../../services/api";
 import { useRealtime, useRealtimeStatus } from "../../context/RealtimeContext";
+import IconButton from "../ui/IconButton";
 
 export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { user, logout } = useAuth();
@@ -40,14 +41,9 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
-      <button
-        type="button"
-        onClick={onMenuClick}
-        className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden"
-        aria-label="Open navigation menu"
-      >
+      <IconButton label="Open navigation menu" size="md" onClick={onMenuClick} className="lg:hidden">
         <Menu className="h-5 w-5" />
-      </button>
+      </IconButton>
 
       <div className="flex-1" />
 
@@ -56,21 +52,16 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
           role="status"
           title={live ? "Live updates connected" : "Live updates reconnecting…"}
           aria-label={live ? "Live updates connected" : "Live updates reconnecting"}
-          className={`h-2 w-2 rounded-full ${live ? "bg-green-500" : "bg-gray-300"}`}
+          className={`h-2 w-2 rounded-full ${live ? "bg-status-success" : "bg-gray-300"}`}
         />
-        <button
-          type="button"
-          onClick={() => navigate("/notifications")}
-          className="relative rounded-lg p-2 text-gray-500 hover:bg-gray-100"
-          aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
-        >
+        <IconButton label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`} size="md" onClick={() => navigate("/notifications")} className="relative">
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-status-danger px-1 text-[10px] font-semibold text-white">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}
-        </button>
+        </IconButton>
 
         <div className="relative">
           <button

@@ -41,9 +41,9 @@ export default function DecisionCard({
     return (
       <Card className="scroll-mt-4" >
         <h2 id="decision" className="mb-3 text-base font-semibold text-gray-900">Decision</h2>
-        <div className={`rounded-lg border p-3 text-sm ${approved ? "border-primary/30 bg-status-successBg text-gray-900" : "border-red-200 bg-red-50 text-gray-900"}`}>
+        <div className={`rounded-lg border p-3 text-sm ${approved ? "border-primary/30 bg-status-successBg text-gray-900" : "border-status-danger/30 bg-status-dangerBg text-gray-900"}`}>
           <p className="flex items-center gap-2 font-semibold">
-            {approved ? <CheckCircle2 className="h-4 w-4 text-primary" aria-hidden="true" /> : <XCircle className="h-4 w-4 text-red-700" aria-hidden="true" />}
+            {approved ? <CheckCircle2 className="h-4 w-4 text-primary" aria-hidden="true" /> : <XCircle className="h-4 w-4 text-status-danger" aria-hidden="true" />}
             {approved ? "Approved" : "Rejected"}
             {reviewedAt ? ` on ${formatDate(reviewedAt)}` : ""}
             {reviewedByName ? ` by ${reviewedByName}` : ""}
@@ -84,7 +84,7 @@ export default function DecisionCard({
           variant="danger"
           disabled={busy}
           {...lockProps}
-          className="!bg-red-700 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
           onClick={() => unlocked && setMode("rejected")}
         >
           <XCircle className="h-4 w-4" aria-hidden="true" /> Reject

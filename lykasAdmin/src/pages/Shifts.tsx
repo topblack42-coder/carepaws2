@@ -10,6 +10,7 @@ import ConfirmModal from "../components/ui/ConfirmModal";
 import AddShiftModal from "../components/shifts/AddShiftModal";
 import EditShiftModal from "../components/shifts/EditShiftModal";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 interface Shift {
   _id: string;
@@ -64,12 +65,12 @@ export default function Shifts() {
         onPageChange={list.setPage}
         rowActions={(s) => (
           <div className="flex justify-end gap-1">
-            <button type="button" onClick={() => setEditing(s)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Edit shift">
+            <IconButton label="Edit shift" onClick={() => setEditing(s)}>
               <Pencil className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={() => setDeleting(s)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Delete shift">
+            </IconButton>
+            <IconButton label="Delete shift" onClick={() => setDeleting(s)}>
               <Trash2 className="h-4 w-4" />
-            </button>
+            </IconButton>
           </div>
         )}
       />

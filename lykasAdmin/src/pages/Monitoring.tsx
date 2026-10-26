@@ -6,6 +6,7 @@ import { PageHeader } from "../components/ui/SharedUI";
 import DataTable, { type Column } from "../components/ui/DataTable";
 import StatusBadge from "../components/ui/StatusBadge";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 interface MonitoringReport {
   _id: string;
@@ -87,24 +88,12 @@ export default function Monitoring() {
         rowActions={(r) =>
           r.status === "pending" && r.submittedAt ? (
             <div className="flex justify-end gap-1">
-              <button
-                type="button"
-                disabled={actingOn === r._id}
-                onClick={() => review(r, "reviewed")}
-                className="rounded-lg p-1.5 text-status-success hover:bg-status-successBg disabled:opacity-50"
-                aria-label="Complete monitoring report"
-              >
+              <IconButton label="Complete monitoring report" tone="success" disabled={actingOn === r._id} onClick={() => review(r, "reviewed")}>
                 <CheckCircle2 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                disabled={actingOn === r._id}
-                onClick={() => review(r, "flagged")}
-                className="rounded-lg p-1.5 text-status-danger hover:bg-status-dangerBg disabled:opacity-50"
-                aria-label="Flag for follow-up"
-              >
+              </IconButton>
+              <IconButton label="Flag for follow-up" tone="danger" disabled={actingOn === r._id} onClick={() => review(r, "flagged")}>
                 <Flag className="h-4 w-4" />
-              </button>
+              </IconButton>
             </div>
           ) : null
         }

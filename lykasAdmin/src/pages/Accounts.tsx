@@ -8,6 +8,7 @@ import StatusBadge from "../components/ui/StatusBadge";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import { useToast } from "../context/ToastContext";
 import { useAuth } from "../context/AuthContext";
+import IconButton from "../components/ui/IconButton";
 
 interface AccountRow {
   _id: string;
@@ -60,41 +61,26 @@ export default function Accounts() {
         rowActions={(u) => (
           <div className="flex justify-end gap-1">
             {u.status === "active" ? (
-              <button
-                type="button"
-                onClick={() => setSuspending(u)}
-                className="rounded-lg p-1.5 text-status-danger hover:bg-status-dangerBg"
-                aria-label={`Suspend ${u.displayName}`}
-              >
+              <IconButton label={`Suspend ${u.displayName}`} tone="danger" onClick={() => setSuspending(u)}>
                 <Ban className="h-4 w-4" />
-              </button>
+              </IconButton>
             ) : (
-              <button
-                type="button"
-                onClick={async () => {
+              <IconButton label={`Reactivate ${u.displayName}`} tone="success" onClick={async () => {
                   await api.put(`/api/auth/users/${u._id}/status`, { status: "active" });
                   showToast("Account reactivated", "success");
                   list.reload();
-                }}
-                className="rounded-lg p-1.5 text-status-success hover:bg-status-successBg"
-                aria-label={`Reactivate ${u.displayName}`}
-              >
+                }}>
                 <ShieldCheck className="h-4 w-4" />
-              </button>
+              </IconButton>
             )}
             {hasRole("super_admin") && (
-              <button
-                type="button"
-                onClick={async () => {
+              <IconButton label={`Archive ${u.displayName}`} onClick={async () => {
                   await api.delete(`/api/auth/users/${u._id}`);
                   showToast("Account archived", "success");
                   list.reload();
-                }}
-                className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
-                aria-label={`Archive ${u.displayName}`}
-              >
+                }}>
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </IconButton>
             )}
           </div>
         )}

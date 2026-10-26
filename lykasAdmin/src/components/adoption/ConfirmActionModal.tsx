@@ -71,7 +71,7 @@ export default function ConfirmActionModal({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button variant={variant} onClick={submit} loading={saving} className={variant === "danger" ? "!bg-red-700 hover:!bg-red-800" : ""}>
+          <Button variant={variant} onClick={submit} loading={saving}>
             {confirmLabel}
           </Button>
         </>
@@ -82,7 +82,7 @@ export default function ConfirmActionModal({
         <div>
           <label htmlFor={fieldId} className="mb-1 block text-sm font-medium text-gray-800">
             {noteLabel}
-            {required ? <span className="text-red-700"> (required)</span> : <span className="font-normal text-gray-500"> (optional)</span>}
+            {required ? <span className="text-status-danger"> (required)</span> : <span className="font-normal text-gray-500"> (optional)</span>}
           </label>
           <TextArea
             id={fieldId}
@@ -102,7 +102,7 @@ export default function ConfirmActionModal({
           </p>
         </div>
         {error && (
-          <p id={errorId} role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          <p id={errorId} role="alert" className="rounded-lg border border-status-danger/20 bg-status-dangerBg px-3 py-2 text-sm text-status-danger">
             {error}
           </p>
         )}

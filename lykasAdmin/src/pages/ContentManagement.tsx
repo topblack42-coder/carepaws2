@@ -11,6 +11,7 @@ import Alert from "../components/ui/Alert";
 import { FormField, Input, Select } from "../components/ui/FormUI";
 import TextArea from "../components/ui/TextArea";
 import { useToast } from "../context/ToastContext";
+import IconButton from "../components/ui/IconButton";
 
 interface ContentItem {
   _id: string;
@@ -102,21 +103,16 @@ export default function ContentManagement() {
         onPageChange={list.setPage}
         rowActions={(c) => (
           <div className="flex justify-end gap-1">
-            <button type="button" onClick={() => openEdit(c)} className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100" aria-label="Edit">
+            <IconButton label="Edit" onClick={() => openEdit(c)}>
               <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
+            </IconButton>
+            <IconButton label="Delete" onClick={async () => {
                 await api.delete(`/api/content/${c._id}`);
                 showToast("Content deleted", "success");
                 list.reload();
-              }}
-              className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100"
-              aria-label="Delete"
-            >
+              }}>
               <Trash2 className="h-4 w-4" />
-            </button>
+            </IconButton>
           </div>
         )}
       />

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { LoadingState, EmptyState, ErrorState } from "./StateDisplays";
 import { Input, Select } from "./FormUI";
+import IconButton from "./IconButton";
 
 export interface Column<T> {
   header: string;
@@ -138,24 +139,12 @@ export default function DataTable<T>({
             Page {page} of {pages} · {total} total
           </span>
           <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => onPageChange(page - 1)}
-              disabled={page <= 1}
-              className="rounded-lg p-1.5 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Previous page"
-            >
+            <IconButton label="Previous page" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
               <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onPageChange(page + 1)}
-              disabled={page >= pages}
-              className="rounded-lg p-1.5 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Next page"
-            >
+            </IconButton>
+            <IconButton label="Next page" onClick={() => onPageChange(page + 1)} disabled={page >= pages}>
               <ChevronRight className="h-4 w-4" />
-            </button>
+            </IconButton>
           </div>
         </div>
       )}
