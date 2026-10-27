@@ -11,6 +11,19 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    setMenuOpen(false);
+    try {
+      await logout();
+      navigate("/login");
+    } finally {
+      if (mounted.current) setLoggingOut(false);
+    }
+  }
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -90,11 +103,8 @@ export default function Navbar({ onMenuClick }: { onMenuClick: () => void }) {
               <button
                 type="button"
                 role="menuitem"
-                onClick={async () => {
-                  setMenuOpen(false);
-                  await logout();
-                  navigate("/login");
-                }}
+                disabled={loggingOut}
+                onClick={handleLogout}
                 className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
               >
                 <LogOut className="h-4 w-4" aria-hidden="true" />

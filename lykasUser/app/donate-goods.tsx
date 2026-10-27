@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { View, Text, ScrollView, Pressable, Alert, Image } from "react-native";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -30,19 +30,29 @@ export default function DonateGoodsScreen() {
 
   const needsAddress = dropOff !== "walk_in";
 
+  const picking = useRef(false);
+
   async function pickPhotos() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Permission needed", "Allow photo library access to attach photos of your donation.");
-      return;
+    if (picking.current) return;
+    picking.current = true;
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert("Permission needed", "Allow photo library access to attach photos of your donation.");
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultipleSelection: true,
+        selectionLimit: 5,
+        quality: 0.8,
+      });
+      if (!result.canceled) setPhotos(result.assets.slice(0, 5));
+    } catch {
+      Alert.alert("Couldn't open photos", "Something went wrong while opening your photo library. Please try again.");
+    } finally {
+      picking.current = false;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsMultipleSelection: true,
-      selectionLimit: 5,
-      quality: 0.8,
-    });
-    if (!result.canceled) setPhotos(result.assets.slice(0, 5));
   }
 
   async function handleSubmit() {

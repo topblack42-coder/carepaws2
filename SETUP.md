@@ -271,7 +271,7 @@ Expo Go.
 With all three running, walk through this to confirm the whole stack talks
 to itself correctly:
 
-1. **Admin panel** → Manage Pets → Add pet. Fill in a name, species,
+1. **Admin panel** → Pet Records → Add pet. Fill in a name, species,
    upload a photo (needs Cloudinary configured — see §8 — otherwise skip
    the photo and it'll save with no image).
 2. **Mobile app** → Adopt tab → pull to refresh. Your new pet should
@@ -281,7 +281,7 @@ to itself correctly:
 4. **Admin panel** → Adoption Applications → your new application should
    appear with status "pending", stage "submitted".
 5. **Admin panel** → click the checkmark to approve it. The pet's status
-   should flip to "Adopted" (check Manage Pets).
+   should flip to "Adopted" (check Pet Records).
 6. **Mobile app** → My Applications → the application should now show
    "approved".
 

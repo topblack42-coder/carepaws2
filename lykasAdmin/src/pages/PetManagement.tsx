@@ -138,7 +138,7 @@ export default function PetManagement() {
 
   return (
     <div>
-      <PageHeader title="Pet Management" description="Select a pet to view and manage its full operational profile." />
+      <PageHeader title="Pet Care Profiles" description="Select a pet to view and manage its full operational profile." />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_1fr]">
         {/* Left: pet picker */}

@@ -18,6 +18,7 @@ interface Feedback {
   subject: string;
   message: string;
   status: string;
+  isPublic?: boolean;
 }
 
 export default function FeedbackReviews() {
@@ -34,7 +35,23 @@ export default function FeedbackReviews() {
     { key: "subject", header: "Subject", accessor: (f) => f.subject },
     { key: "rating", header: "Rating", accessor: (f) => (f.rating ? `${f.rating}/5` : "—") },
     { key: "status", header: "Status", accessor: (f) => <StatusBadge status={f.status} /> },
+    {
+      key: "published",
+      header: "Published",
+      accessor: (f) => (f.type === "review" ? (f.isPublic ? "Yes" : "No") : "—"),
+    },
   ];
+
+  // Reviews only appear in the mobile app once staff publish them.
+  async function togglePublished(f: Feedback) {
+    try {
+      await api.put(`/api/feedback/${f._id}`, { isPublic: !f.isPublic });
+      showToast(f.isPublic ? "Review unpublished" : "Review published", "success");
+      list.reload();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, "Failed to update review"), "error");
+    }
+  }
 
   return (
     <div>
@@ -57,9 +74,16 @@ export default function FeedbackReviews() {
         total={list.pagination.total}
         onPageChange={list.setPage}
         rowActions={(f) => (
-          <Button variant="secondary" onClick={() => setResponding(f)}>
-            Respond
-          </Button>
+          <div className="flex gap-2">
+            {f.type === "review" && (
+              <Button variant={f.isPublic ? "ghost" : "primary"} onClick={() => togglePublished(f)}>
+                {f.isPublic ? "Unpublish" : "Publish"}
+              </Button>
+            )}
+            <Button variant="secondary" onClick={() => setResponding(f)}>
+              Respond
+            </Button>
+          </div>
         )}
       />
 

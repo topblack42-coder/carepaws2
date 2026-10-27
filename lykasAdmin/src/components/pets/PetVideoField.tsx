@@ -117,7 +117,14 @@ export default function PetVideoField({
   }
 
   async function confirmRemove() {
-    await onRemoveExisting?.();
+    if (removing) return;
+    try {
+      await onRemoveExisting?.();
+    } catch {
+      // The parent reports the failure; keep the confirm prompt open so the
+      // admin can retry instead of seeing an unhandled rejection.
+      return;
+    }
     setConfirmingRemove(false);
   }
 

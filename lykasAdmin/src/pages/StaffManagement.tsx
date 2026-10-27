@@ -46,7 +46,7 @@ export default function StaffManagement() {
 
   return (
     <div>
-      <PageHeader title="Staff Management" description="Assign shelter staff and admin roles. Super admin only." />
+      <PageHeader title="Staff & Roles" description="Assign shelter staff and admin roles. Super admin only." />
       <DataTable
         columns={columns}
         rows={list.rows}

@@ -24,7 +24,25 @@ export default function Accounts() {
   const { showToast } = useToast();
   const { hasRole } = useAuth();
   const [suspending, setSuspending] = useState<AccountRow | null>(null);
+  const [archiving, setArchiving] = useState<AccountRow | null>(null);
   const [saving, setSaving] = useState(false);
+  // Id of the account a row action (reactivate/archive) is currently running
+  // for; disables that row's buttons so a double-click can't send two requests.
+  const [actingOn, setActingOn] = useState<string | null>(null);
+
+  async function reactivate(u: AccountRow) {
+    if (actingOn) return;
+    setActingOn(u._id);
+    try {
+      await api.put(`/api/auth/users/${u._id}/status`, { status: "active" });
+      showToast("Account reactivated", "success");
+      list.reload();
+    } catch (err) {
+      showToast(getApiErrorMessage(err, "Failed to reactivate account"), "error");
+    } finally {
+      setActingOn(null);
+    }
+  }
 
   const columns: Column<AccountRow>[] = [
     { key: "displayName", header: "Name", accessor: (u) => u.displayName },
@@ -36,7 +54,7 @@ export default function Accounts() {
 
   return (
     <div>
-      <PageHeader title="Manage Accounts" description="All user accounts across the platform." />
+      <PageHeader title="User Accounts" description="All user accounts across the platform." />
       <DataTable
         columns={columns}
         rows={list.rows}
@@ -61,24 +79,16 @@ export default function Accounts() {
         rowActions={(u) => (
           <div className="flex justify-end gap-1">
             {u.status === "active" ? (
-              <IconButton label={`Suspend ${u.displayName}`} tone="danger" onClick={() => setSuspending(u)}>
+              <IconButton label={`Suspend ${u.displayName}`} tone="danger" disabled={actingOn === u._id} onClick={() => setSuspending(u)}>
                 <Ban className="h-4 w-4" />
               </IconButton>
             ) : (
-              <IconButton label={`Reactivate ${u.displayName}`} tone="success" onClick={async () => {
-                  await api.put(`/api/auth/users/${u._id}/status`, { status: "active" });
-                  showToast("Account reactivated", "success");
-                  list.reload();
-                }}>
+              <IconButton label={`Reactivate ${u.displayName}`} tone="success" disabled={actingOn === u._id} onClick={() => reactivate(u)}>
                 <ShieldCheck className="h-4 w-4" />
               </IconButton>
             )}
             {hasRole("super_admin") && (
-              <IconButton label={`Archive ${u.displayName}`} onClick={async () => {
-                  await api.delete(`/api/auth/users/${u._id}`);
-                  showToast("Account archived", "success");
-                  list.reload();
-                }}>
+              <IconButton label={`Archive ${u.displayName}`} disabled={actingOn === u._id} onClick={() => setArchiving(u)}>
                 <Trash2 className="h-4 w-4" />
               </IconButton>
             )}
@@ -108,6 +118,30 @@ export default function Accounts() {
           }
         }}
         onCancel={() => setSuspending(null)}
+      />
+
+      <ConfirmModal
+        isOpen={!!archiving}
+        title="Archive this account?"
+        message={`${archiving?.displayName} will be archived and removed from the active accounts list.`}
+        confirmLabel="Archive"
+        variant="danger"
+        loading={saving}
+        onConfirm={async () => {
+          if (!archiving || saving) return;
+          setSaving(true);
+          try {
+            await api.delete(`/api/auth/users/${archiving._id}`);
+            showToast("Account archived", "success");
+            list.reload();
+          } catch (err) {
+            showToast(getApiErrorMessage(err, "Failed to archive account"), "error");
+          } finally {
+            setSaving(false);
+            setArchiving(null);
+          }
+        }}
+        onCancel={() => setArchiving(null)}
       />
     </div>
   );

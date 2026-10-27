@@ -14,6 +14,9 @@ import {
   FileCheck2,
   HeartHandshake,
   Stethoscope,
+  Video,
+  Activity,
+  UserCheck,
   CalendarDays,
   Clock,
   HandHeart,
@@ -58,9 +61,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Pet operations",
     items: [
-      { label: "Manage Pets", to: "/pets", icon: PawPrint },
+      { label: "Pet Records", to: "/pets", icon: PawPrint },
       { label: "Pet Gallery", to: "/pets/gallery", icon: Images },
-      { label: "Pet Management", to: "/pets/management", icon: ClipboardList },
+      { label: "Pet Care Profiles", to: "/pets/management", icon: ClipboardList },
       { label: "Inventory", to: "/inventory", icon: Boxes },
     ],
   },
@@ -70,7 +73,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Adoption Applications", to: "/adoptions", icon: FileText },
       { label: "Adoption Scheduling", to: "/adoptions/scheduling", icon: CalendarClock },
       { label: "Adopter Profiles & Risk", to: "/adopters", icon: Users },
-      { label: "Adoption Interviews", to: "/interviews", icon: ClipboardList },
+      { label: "Adoption Interviews", to: "/interviews", icon: Video },
       { label: "Home Visits", to: "/home-visits", icon: Home },
       { label: "Risk Assessments", to: "/risk-assessments", icon: ShieldCheck },
       { label: "Document Review", to: "/documents", icon: FileCheck2 },
@@ -80,8 +83,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Foster & health",
     items: [
       { label: "Foster Management", to: "/fosters", icon: HeartHandshake },
-      { label: "Post-Adoption Monitoring", to: "/monitoring", icon: Stethoscope },
-      { label: "Health & Baby Book", to: "/health", icon: Stethoscope },
+      { label: "Post-Adoption Monitoring", to: "/monitoring", icon: Activity },
+      { label: "Health & Journal", to: "/health", icon: Stethoscope },
     ],
   },
   {
@@ -91,13 +94,13 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Shifts & Volunteers", to: "/shifts", icon: Clock },
       { label: "Volunteer Applications", to: "/volunteers", icon: HandHeart },
       { label: "Feedback & Reviews", to: "/feedback", icon: MessageSquareHeart },
-      { label: "Content Management", to: "/content", icon: FileText },
+      { label: "Content", to: "/content", icon: FileText },
     ],
   },
   {
     label: "Finance",
     items: [
-      { label: "Payment Management", to: "/payments", icon: CreditCard, roles: ["admin", "super_admin"] },
+      { label: "Payments", to: "/payments", icon: CreditCard, roles: ["admin", "super_admin"] },
       { label: "Donations", to: "/donations", icon: Gift, roles: ["admin", "super_admin"] },
       { label: "Goods Donations", to: "/donations/goods", icon: Package },
     ],
@@ -112,8 +115,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "People & access",
     items: [
-      { label: "Manage Accounts", to: "/accounts", icon: UserCog, roles: ["admin", "super_admin"] },
-      { label: "Staff Management", to: "/staff", icon: UserCog, roles: ["super_admin"] },
+      { label: "User Accounts", to: "/accounts", icon: UserCog, roles: ["admin", "super_admin"] },
+      { label: "Staff & Roles", to: "/staff", icon: UserCheck, roles: ["super_admin"] },
       { label: "User Verification", to: "/verification", icon: ShieldAlert, roles: ["admin", "super_admin"] },
       // Hidden for now:
       // { label: "Shelter Management", to: "/shelters", icon: Building2, roles: ["admin", "super_admin"] },
@@ -123,7 +126,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "System",
     items: [
-      { label: "System Audit Logs", to: "/audit-logs", icon: ScrollText, roles: ["super_admin"] },
+      { label: " Audit trails", to: "/audit-logs", icon: ScrollText, roles: ["super_admin"] },
       { label: "Emergency Reports", to: "/emergency-reports", icon: Siren },
       { label: "Shelter Settings", to: "/settings", icon: SettingsIcon, roles: ["admin", "super_admin"] },
     ],

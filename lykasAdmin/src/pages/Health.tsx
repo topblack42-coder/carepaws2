@@ -215,7 +215,7 @@ export default function Health() {
 
   return (
     <div>
-      <PageHeader title="Health & Baby Book" description="Medical timeline, shelter-floor care, and photo/growth journal per pet." />
+      <PageHeader title="Health & Journal" description="Medical timeline, shelter-floor care, and photo/growth journal per pet." />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
         <Card className="p-0">

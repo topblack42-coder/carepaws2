@@ -3,7 +3,6 @@ import { useRealtime, useRealtimeReload, useSilentFlag } from "../../context/Rea
 import { View, Text, ScrollView, RefreshControl, FlatList, Pressable } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../../utils/api";
 import { useAuth } from "../../context/AuthContext";
 import { fetchMyApplications, type ApplicationSummary } from "../../utils/applications";
@@ -11,6 +10,10 @@ import PetCard, { type PetSummary } from "../../components/PetCard";
 import StateView from "../../components/StateView";
 import ApplicationsSection from "../../components/ApplicationsSection";
 import DonationCard from "../../components/DonationCard";
+import NotificationBell from "../../components/NotificationBell";
+import NotificationBanner from "../../components/NotificationBanner";
+import ReviewsSection from "../../components/ReviewsSection";
+import { useNotificationSummary } from "../../hooks/useNotificationSummary";
 import colors from "../../utils/colors";
 
 interface Announcement {
@@ -30,6 +33,7 @@ export default function HomeScreen() {
   const [appsLoading, setAppsLoading] = useState(true);
   const [appsError, setAppsError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const notifications = useNotificationSummary();
 
   // Live refreshes keep what is on screen: no error banner if they fail.
   const livePets = useSilentFlag();
@@ -99,9 +103,9 @@ export default function HomeScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.allSettled([loadPets(), loadAnnouncements(), loadApplications()]);
+    await Promise.allSettled([loadPets(), loadAnnouncements(), loadApplications(), notifications.reload()]);
     setRefreshing(false);
-  }, [loadPets, loadAnnouncements, loadApplications]);
+  }, [loadPets, loadAnnouncements, loadApplications, notifications.reload]);
 
   return (
     <SafeAreaView className="flex-1 bg-cream" edges={["top"]}>
@@ -114,8 +118,12 @@ export default function HomeScreen() {
             <Text className="font-sans text-sm text-muted">Welcome back,</Text>
             <Text className="font-display text-xl text-ink">{user?.displayName?.split(" ")[0]}</Text>
           </View>
-          <Ionicons name="paw" size={28} color={colors.primary} />
+          <NotificationBell count={notifications.count} />
         </View>
+
+        {notifications.latest && (
+          <NotificationBanner notification={notifications.latest} unreadCount={notifications.count} onDismiss={notifications.dismissLatest} />
+        )}
 
         {announcements.map((a) => (
           <View
@@ -170,6 +178,8 @@ export default function HomeScreen() {
             />
           )}
         </View>
+
+        <ReviewsSection />
 
         <Text className="mb-3 font-display text-lg text-ink">Ways to help</Text>
         <DonationCard />

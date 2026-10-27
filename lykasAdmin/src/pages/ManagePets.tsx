@@ -58,7 +58,7 @@ export default function ManagePets() {
   return (
     <div>
       <PageHeader
-        title="Manage Pets"
+        title="Pet Records"
         description="Add, edit, archive, and restore pets in the shelter's catalog."
         actions={
           <Button onClick={() => setAddOpen(true)}>
@@ -108,6 +108,7 @@ export default function ManagePets() {
               <IconButton label={`Restore ${pet.name}`} disabled={pets.mutating} onClick={async () => {
                   const ok = await pets.restorePet(pet._id);
                   if (ok) showToast("Pet restored", "success");
+                  else showToast("Failed to restore pet", "error");
                 }}>
                 <RotateCcw className="h-4 w-4" />
               </IconButton>

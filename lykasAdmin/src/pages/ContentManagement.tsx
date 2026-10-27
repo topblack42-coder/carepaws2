@@ -79,7 +79,7 @@ export default function ContentManagement() {
   return (
     <div>
       <PageHeader
-        title="Content Management"
+        title="Content"
         description="FAQs, policies, and pages shown in the mobile app."
         actions={
           <Button onClick={() => openEdit("new")}>

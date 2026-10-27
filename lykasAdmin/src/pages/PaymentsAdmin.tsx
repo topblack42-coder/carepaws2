@@ -35,7 +35,7 @@ export default function PaymentsAdmin() {
 
   return (
     <div>
-      <PageHeader title="Payment Management" description="All payments processed through the platform." />
+      <PageHeader title="Payments" description="All payments processed through the platform." />
 
       <DonationTracker stats={summary.map((s) => ({ _id: s._id, totalCentavos: s.total, count: s.count }))} />
 

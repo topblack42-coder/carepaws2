@@ -29,14 +29,17 @@ export default function DocumentReview() {
   const [rejecting, setRejecting] = useState<UserDocument | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  async function verify(doc: UserDocument, status: "verified" | "rejected", rejectedReason?: string) {
+  async function verify(doc: UserDocument, status: "verified" | "rejected", rejectedReason?: string): Promise<boolean> {
+    if (actingOn) return false;
     setActingOn(doc._id);
     try {
       await api.put(`/api/documents/${doc._id}/verify`, status === "rejected" ? { status, rejectedReason } : { status });
       showToast(`Document ${status}`, "success");
       list.reload();
+      return true;
     } catch (err) {
       showToast(getApiErrorMessage(err, "Failed to update document"), "error");
+      return false;
     } finally {
       setActingOn(null);
     }
@@ -48,9 +51,10 @@ export default function DocumentReview() {
   }
 
   async function confirmReject() {
-    if (!rejecting) return;
-    await verify(rejecting, "rejected", rejectReason.trim() || undefined);
-    setRejecting(null);
+    if (!rejecting || actingOn) return;
+    const ok = await verify(rejecting, "rejected", rejectReason.trim() || undefined);
+    // Keep the modal (and the typed reason) open if the request failed.
+    if (ok) setRejecting(null);
   }
 
   const columns: Column<UserDocument>[] = [
@@ -118,7 +122,7 @@ export default function DocumentReview() {
         title="Reject document"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setRejecting(null)}>
+            <Button variant="secondary" onClick={() => setRejecting(null)} disabled={actingOn !== null}>
               Cancel
             </Button>
             <Button variant="danger" loading={actingOn === rejecting?._id} onClick={confirmReject}>
