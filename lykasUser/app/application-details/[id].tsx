@@ -18,6 +18,16 @@ interface StageHistoryEntry {
   note?: string;
 }
 
+interface Pickup {
+  _id: string;
+  application: string;
+  scheduledDate: string;
+  method: string;
+  location?: string;
+  status: "scheduled" | "completed" | "cancelled" | "no-show";
+  cancelReason?: string;
+}
+
 interface ApplicationDetail {
   _id: string;
   pet: { name: string; imageUrl?: string };
@@ -31,6 +41,7 @@ interface ApplicationDetail {
 export default function ApplicationDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
+  const [pickup, setPickup] = useState<Pickup | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,6 +57,13 @@ export default function ApplicationDetailsScreen() {
     try {
       const res = await api.get(`/api/applications/${id}`);
       setApplication(res.data.data);
+      try {
+        // Newest pickup for this application (the list is sorted newest first).
+        const pickups = await api.get("/api/adoption-pickups/my");
+        setPickup((pickups.data.data as Pickup[]).find((p) => String(p.application) === String(id)) ?? null);
+      } catch {
+        setPickup(null); // The pickup card is optional; never block the page on it.
+      }
     } catch (err) {
       if (!silent) setError(getApiErrorMessage(err, "Failed to load this application"));
     } finally {
@@ -53,7 +71,7 @@ export default function ApplicationDetailsScreen() {
     }
   }, [live, id]);
 
-  useRealtimeReload(["Application", "Interview", "HomeVisit", "RiskAssessment", "Payment", "UserDocument"], load, live);
+  useRealtimeReload(["Application", "Interview", "HomeVisit", "AdoptionPickup", "RiskAssessment", "Payment", "UserDocument"], load, live);
 
   useFocusEffect(
     useCallback(() => {
@@ -126,6 +144,34 @@ export default function ApplicationDetailsScreen() {
         {application.type === "foster" && application.status === "approved" && (
           <View className="mb-5 rounded-xl bg-mintBg px-4 py-3">
             <Text className="font-sans-medium text-sm text-mintDeep">Our team will contact you to start the foster placement.</Text>
+          </View>
+        )}
+
+        {application.type !== "foster" && application.status === "approved" && (
+          <View className="mb-5 rounded-2xl border border-border bg-white p-4">
+            <View className="mb-2 flex-row items-center gap-2">
+              <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+              <Text className="font-sans-medium text-sm text-ink">Pet pickup</Text>
+            </View>
+            {pickup?.status === "scheduled" ? (
+              <>
+                <Text className="font-sans-medium text-base text-ink">{formatDateTime(pickup.scheduledDate)}</Text>
+                <Text className="mt-1 font-sans text-sm text-muted">
+                  {pickup.method === "Home delivery" ? `Delivery to ${pickup.location}` : `Pick up at ${pickup.location || "the shelter"}`}
+                </Text>
+                <Text className="mt-2 font-sans text-xs text-muted">Please bring a valid ID. Contact the shelter from Help if you need to change the time.</Text>
+              </>
+            ) : pickup?.status === "completed" ? (
+              <Text className="font-sans text-sm text-mintDeep">
+                Your pet was handed over{pickup.scheduledDate ? ` on ${formatDateTime(pickup.scheduledDate)}` : ""}. Congratulations!
+              </Text>
+            ) : pickup && (pickup.status === "cancelled" || pickup.status === "no-show") ? (
+              <Text className="font-sans text-sm text-muted">
+                {pickup.status === "no-show" ? "The last pickup was missed." : pickup.cancelReason || "The last pickup was cancelled."} The shelter will contact you to arrange a new time.
+              </Text>
+            ) : (
+              <Text className="font-sans text-sm text-muted">You&apos;re approved! The shelter will schedule your pet&apos;s pickup and notify you here.</Text>
+            )}
           </View>
         )}
 

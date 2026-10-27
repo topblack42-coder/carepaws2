@@ -14,6 +14,8 @@ interface InKindDonation {
   unit?: string;
   donatedBy?: { displayName: string };
   dropOff: string;
+  pickupAddress?: string;
+  photos?: string[];
   status: string;
   inventoryProcessedAt?: string | null;
 }
@@ -41,6 +43,23 @@ export default function GoodsDonations() {
     { key: "quantity", header: "Quantity", accessor: (d) => (d.quantity ? `${d.quantity} ${d.unit ?? ""}` : "—") },
     { key: "donatedBy", header: "Donor", accessor: (d) => d.donatedBy?.displayName || "Anonymous" },
     { key: "dropOff", header: "Drop-off", accessor: (d) => <span className="capitalize">{d.dropOff.replace(/_/g, " ")}</span> },
+    { key: "pickupAddress", header: "Pickup address", accessor: (d) => d.pickupAddress || "—" },
+    {
+      key: "photos",
+      header: "Photos",
+      accessor: (d) =>
+        d.photos?.length ? (
+          <span className="flex gap-1">
+            {d.photos.map((url, i) => (
+              <a key={url} href={url} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
+                {`Photo ${i + 1}`}
+              </a>
+            ))}
+          </span>
+        ) : (
+          "—"
+        ),
+    },
     { key: "status", header: "Status", accessor: (d) => <StatusBadge status={d.status} /> },
     { key: "inventory", header: "Inventory", accessor: (d) => d.inventoryProcessedAt ? "Synced" : "Not received" },
   ];

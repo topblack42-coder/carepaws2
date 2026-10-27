@@ -13,6 +13,7 @@ const ENDPOINT_RESOURCES: [prefix: string, resources: string[]][] = [
   ["/api/payments", ["Payment"]],
   ["/api/home-visits", ["HomeVisit", "Application"]],
   ["/api/interviews", ["Interview", "Application"]],
+  ["/api/adoption-pickups", ["AdoptionPickup", "Application"]],
   ["/api/risk-assessments", ["RiskAssessment", "Application"]],
   ["/api/appointments", ["Appointment"]],
   ["/api/audit-logs", ["AuditLog"]],

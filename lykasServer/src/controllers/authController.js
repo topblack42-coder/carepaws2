@@ -54,8 +54,7 @@ async function issueSession(user, req) {
   return { accessToken, refreshToken };
 }
 
-// Bump when the Privacy Policy / User Agreement text changes.
-const PRIVACY_POLICY_VERSION = "1.0";
+const { PRIVACY_POLICY_VERSION } = require("../config/privacy");
 
 // POST /api/auth/register
 async function register(req, res, next) {

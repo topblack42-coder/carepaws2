@@ -131,6 +131,7 @@ app.use("/api/baby-book", require("./routes/babyBookRoutes"));
 app.use("/api/medical", require("./routes/medicalRecordRoutes"));
 app.use("/api/emergency-reports", require("./routes/emergencyReportRoutes"));
 app.use("/api/interviews", require("./routes/interviewRoutes"));
+app.use("/api/adoption-pickups", require("./routes/adoptionPickupRoutes"));
 app.use("/api/home-visits", require("./routes/homeVisitRoutes"));
 app.use("/api/events", require("./routes/eventRoutes"));
 app.use("/api/event-assignments", require("./routes/eventAssignmentRoutes"));

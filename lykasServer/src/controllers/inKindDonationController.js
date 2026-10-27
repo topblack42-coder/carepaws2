@@ -4,6 +4,17 @@ const { buildListQuery, buildSort, buildPagination } = require("../utils/queryBu
 const { writeAuditLog } = require("../utils/auditLogger");
 const { findInventoryItem, normalizeName, applyDonationMovement } = require("../utils/inventoryService");
 const { notifyOnce } = require("../utils/notificationHelper");
+const cloudinary = require("../config/cloudinary");
+const { PRIVACY_POLICY_VERSION } = require("../config/privacy");
+
+function uploadPhoto(buffer) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream({ folder: "carepaws/goods-donations", resource_type: "image" }, (err, result) =>
+      err ? reject(err) : resolve(result.secure_url)
+    );
+    stream.end(buffer);
+  });
+}
 
 function donationLines(donation) {
   if (Array.isArray(donation.items) && donation.items.length) {
@@ -72,7 +83,18 @@ async function integrateReceivedDonation(donation, actor) {
 
 async function create(req, res, next) {
   try {
-    const donation = await InKindDonation.create({ ...req.body, donatedBy: req.user._id });
+    const { acceptedTerms, ...fields } = req.body;
+    const photos = req.files?.length ? await Promise.all(req.files.map((file) => uploadPhoto(file.buffer))) : [];
+    // Walk-in donors drop goods off themselves, so no pickup address is kept.
+    if (fields.dropOff === "walk_in") delete fields.pickupAddress;
+    const donation = await InKindDonation.create({
+      ...fields,
+      photos,
+      donatedBy: req.user._id,
+      privacyAccepted: true,
+      privacyAcceptedAt: new Date(),
+      privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+    });
     return res.status(201).json({ success: true, data: donation });
   } catch (err) {
     next(err);

@@ -4,6 +4,7 @@ const NOTIFICATION_TYPES = [
   "APPLICATION_SUBMITTED", "APPLICATION_STATUS_CHANGED", "RISK_ASSESSMENT_COMPLETED", "APPLICATION_APPROVED", "APPLICATION_REJECTED", "APPLICATION_CANCELLED", "FOSTER_APPROVED",
   "INTERVIEW_SCHEDULED", "INTERVIEW_RESCHEDULED", "INTERVIEW_CANCELLED", "INTERVIEW_RESULT",
   "HOME_VISIT_SCHEDULED", "HOME_VISIT_RESCHEDULED", "HOME_VISIT_CANCELLED", "HOME_VISIT_RESULT",
+  "ADOPTION_PICKUP_SCHEDULED", "ADOPTION_PICKUP_RESCHEDULED", "ADOPTION_PICKUP_CANCELLED", "ADOPTION_PICKUP_COMPLETED",
   "FOSTER_STARTED", "FOSTER_ENDED", "FOSTER_REPORT_DUE", "FOSTER_REPORT_REVIEWED",
   "MONITORING_REPORT_DUE", "MONITORING_REPORT_REVIEWED", "MONITORING_REPORT_FLAGGED", "MONITORING_REMINDER",
   "EVENT_CREATED", "EVENT_REMINDER", "EVENT_CANCELLED", "EVENT_REGISTRATION", "VOLUNTEER_SHIFT", "EMERGENCY_REPORT_UPDATE", "CHAT_MESSAGE",
@@ -21,7 +22,7 @@ const notificationSchema = new mongoose.Schema(
     message: { type: String, required: true },
     refModel: {
       type: String,
-      enum: ["Application", "Interview", "HomeVisit", "Foster", "MonitoringReport", "Event", "Pet", "Payment", "InKindDonation", "EmergencyReport", null],
+      enum: ["Application", "Interview", "HomeVisit", "AdoptionPickup", "Foster", "MonitoringReport", "Event", "Pet", "Payment", "InKindDonation", "EmergencyReport", null],
       default: null,
     },
     refId: { type: mongoose.Schema.Types.ObjectId, default: null },
