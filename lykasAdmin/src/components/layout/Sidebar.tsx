@@ -26,6 +26,7 @@ import {
   Bell,
   UserCog,
   ShieldAlert,
+  Building2,
   ScrollText,
   Siren,
   Settings as SettingsIcon,
@@ -114,12 +115,14 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Manage Accounts", to: "/accounts", icon: UserCog, roles: ["admin", "super_admin"] },
       { label: "Staff Management", to: "/staff", icon: UserCog, roles: ["super_admin"] },
       { label: "User Verification", to: "/verification", icon: ShieldAlert, roles: ["admin", "super_admin"] },
+      { label: "Shelter Management", to: "/shelters", icon: Building2, roles: ["admin", "super_admin"] },
+      { label: "Cage Management", to: "/cages", icon: Building2, roles: ["admin", "super_admin"] },
     ],
   },
   {
     label: "System",
     items: [
-      { label: "System Audit Logs", to: "/audit-logs", icon: ScrollText, roles: ["super_admin"] },
+      { label: "Audit Trails", to: "/audit-logs", icon: ScrollText, roles: ["super_admin"] },
       { label: "Emergency Reports", to: "/emergency-reports", icon: Siren },
       { label: "Shelter Settings", to: "/settings", icon: SettingsIcon, roles: ["admin", "super_admin"] },
     ],
