@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const Feedback = require("../models/Feedback");
+const Application = require("../models/Application");
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 const validateRequest = require("../middleware/validateRequest");
 const { feedbackCreateSchema, feedbackUpdateSchema } = require("../validators/feedback.schema");
@@ -28,9 +29,26 @@ router.get("/my", protect, async (req, res, next) => {
 
 router.post("/", protect, validateRequest(feedbackCreateSchema), async (req, res, next) => {
   try {
-    const feedback = await Feedback.create({ ...req.body, submittedBy: req.user._id });
+    const payload = { ...req.body, submittedBy: req.user._id };
+
+    // A post-adoption review: only the adopter of a completed adoption, once.
+    if (payload.application) {
+      const application = await Application.findOne({ _id: payload.application, applicant: req.user._id });
+      if (!application) return res.status(404).json({ success: false, message: "Application not found" });
+      if (application.type !== "adoption" || application.stage !== "completed") {
+        return res.status(409).json({ success: false, message: "You can review an adoption once it is completed" });
+      }
+      if (await Feedback.exists({ application: application._id, submittedBy: req.user._id })) {
+        return res.status(409).json({ success: false, message: "You have already reviewed this adoption" });
+      }
+      payload.type = "review";
+      payload.relatedPet = application.pet;
+    }
+
+    const feedback = await Feedback.create(payload);
     res.status(201).json({ success: true, data: feedback });
   } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ success: false, message: "You have already reviewed this adoption" });
     next(err);
   }
 });

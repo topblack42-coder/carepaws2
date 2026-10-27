@@ -145,7 +145,7 @@ async function complete(req, res, next) {
       recipient: pickup.applicant,
       type: "ADOPTION_PICKUP_COMPLETED",
       title: "Adoption complete",
-      message: "Your pet has been handed over. Congratulations on your new family member!",
+      message: "Your pet has been handed over. Congratulations on your new family member! Tell us how it went — open your application to leave a review.",
       refModel: "AdoptionPickup",
       refId: pickup._id,
     });

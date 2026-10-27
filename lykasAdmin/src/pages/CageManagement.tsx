@@ -6,6 +6,7 @@ import { LoadingState, ErrorState, EmptyState } from "../components/ui/StateDisp
 import { Input, Select, FormField } from "../components/ui/FormUI";
 import Button from "../components/ui/Button";
 import Modal from "../components/ui/Modal";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import Alert from "../components/ui/Alert";
 import StatusBadge from "../components/ui/StatusBadge";
 import { useToast } from "../context/ToastContext";
@@ -49,6 +50,8 @@ export default function CageManagement() {
   const [petId, setPetId] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<CageAssignment | null>(null);
+  const [removingBusy, setRemovingBusy] = useState(false);
 
   // Live refreshes reuse load() but skip the spinner / error banner.
   const silentRef = useRef(false);
@@ -115,10 +118,14 @@ export default function CageManagement() {
   }
 
   async function removePet(assignmentId: string) {
+    setRemovingBusy(true);
     try {
       await api.delete(`/api/shelter-care/cages/${assignmentId}`);
-      showToast("Pet removed from cage", "success"); await load();
+      showToast("Pet removed from cage", "success");
+      setRemoving(null);
+      await load();
     } catch (err) { showToast(getApiErrorMessage(err, "Failed to remove pet"), "error"); }
+    finally { setRemovingBusy(false); }
   }
 
   function toggleSpecies(species: string) {
@@ -140,7 +147,7 @@ export default function CageManagement() {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2 text-sm"><div>Capacity <strong>{cage.capacity}</strong></div><div>Occupied <strong>{cage.currentOccupancy}</strong></div><div>Available <strong>{cage.availableCapacity}</strong></div><div>{cage.quarantineOnly ? "Quarantine only" : "Normal cage"}</div></div>
           <p className="mt-2 text-xs text-gray-500">Accepts: {cage.allowedSpecies.join(", ")}</p>
-          {assignments.filter((a) => (typeof a.cageId === "string" ? a.cageId : a.cageId?._id) === cage._id).map((a) => <div key={a._id} className="mt-2 flex items-center justify-between rounded border border-gray-100 px-2 py-1 text-sm"><span>{a.pet?.name ?? "Assigned pet"}{a.pet?.species ? ` (${a.pet.species})` : ""}</span><Button variant="secondary" onClick={() => removePet(a._id)}><UserMinus className="h-4 w-4" /> Remove</Button></div>)}
+          {assignments.filter((a) => (typeof a.cageId === "string" ? a.cageId : a.cageId?._id) === cage._id).map((a) => <div key={a._id} className="mt-2 flex items-center justify-between rounded border border-gray-100 px-2 py-1 text-sm"><span>{a.pet?.name ?? "Assigned pet"}{a.pet?.species ? ` (${a.pet.species})` : ""}</span><Button variant="secondary" onClick={() => setRemoving(a)}><UserMinus className="h-4 w-4" /> Remove</Button></div>)}
           <div className="mt-4 flex gap-2"><Button variant="secondary" onClick={() => openEdit(cage)}><Pencil className="h-4 w-4" /> Edit</Button>{cage.availableCapacity > 0 && cage.status === "active" && <Button onClick={() => openAssign(cage)}>Assign</Button>}</div>
         </Card>;
       })}
@@ -162,5 +169,16 @@ export default function CageManagement() {
     <Modal isOpen={assignOpen} onClose={() => setAssignOpen(false)} title={`Assign pet to cage ${selectedCage?.cageNumber ?? ""}`} footer={<><Button variant="secondary" onClick={() => setAssignOpen(false)} disabled={saving}>Cancel</Button><Button type="submit" form="assign-form" loading={saving}>Assign</Button></>}>
       <form id="assign-form" onSubmit={assignPet}>{saveError && <Alert tone="danger">{saveError}</Alert>}<FormField label="Pet" htmlFor="cage-pet"><Select id="cage-pet" required value={petId} disabled={petsLoading} onChange={(e) => setPetId(e.target.value)}><option value="">{petsLoading ? "Loading pets..." : eligiblePets.length ? "Select pet" : "No eligible pets"}</option>{eligiblePets.map((p) => <option key={p._id} value={p._id}>{p.name} ({p.species})</option>)}</Select></FormField><p className="text-xs text-gray-500">Only pets that fit this cage are listed. The server still validates shelter, quarantine, species, capacity, and duplicate assignment rules.</p></form>
     </Modal>
+
+    <ConfirmModal
+      isOpen={!!removing}
+      title="Remove pet from cage?"
+      message={`${removing?.pet?.name ?? "This pet"} will be unassigned from the cage and the cage's occupancy will be updated.`}
+      confirmLabel="Remove"
+      variant="danger"
+      loading={removingBusy}
+      onConfirm={() => { if (removing) void removePet(removing._id); }}
+      onCancel={() => setRemoving(null)}
+    />
   </div>;
 }

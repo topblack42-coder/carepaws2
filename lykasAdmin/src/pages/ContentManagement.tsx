@@ -7,6 +7,7 @@ import DataTable, { type Column } from "../components/ui/DataTable";
 import StatusBadge from "../components/ui/StatusBadge";
 import Button from "../components/ui/Button";
 import Modal from "../components/ui/Modal";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import Alert from "../components/ui/Alert";
 import { FormField, Input, Select } from "../components/ui/FormUI";
 import TextArea from "../components/ui/TextArea";
@@ -31,6 +32,8 @@ export default function ContentManagement() {
   const [isPublished, setIsPublished] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<ContentItem | null>(null);
+  const [deletingBusy, setDeletingBusy] = useState(false);
 
   function openEdit(item: ContentItem | "new") {
     setEditing(item);
@@ -106,15 +109,35 @@ export default function ContentManagement() {
             <IconButton label="Edit" onClick={() => openEdit(c)}>
               <Pencil className="h-4 w-4" />
             </IconButton>
-            <IconButton label="Delete" onClick={async () => {
-                await api.delete(`/api/content/${c._id}`);
-                showToast("Content deleted", "success");
-                list.reload();
-              }}>
+            <IconButton label="Delete" onClick={() => setDeleting(c)}>
               <Trash2 className="h-4 w-4" />
             </IconButton>
           </div>
         )}
+      />
+
+      <ConfirmModal
+        isOpen={!!deleting}
+        title="Delete this content?"
+        message={`"${deleting?.title ?? ""}" will be removed${deleting?.isPublished ? " and will no longer be visible to the public" : ""}.`}
+        confirmLabel="Delete"
+        variant="danger"
+        loading={deletingBusy}
+        onConfirm={async () => {
+          if (!deleting) return;
+          setDeletingBusy(true);
+          try {
+            await api.delete(`/api/content/${deleting._id}`);
+            showToast("Content deleted", "success");
+            setDeleting(null);
+            list.reload();
+          } catch (err) {
+            showToast(getApiErrorMessage(err, "Failed to delete content"), "error");
+          } finally {
+            setDeletingBusy(false);
+          }
+        }}
+        onCancel={() => setDeleting(null)}
       />
 
       <Modal

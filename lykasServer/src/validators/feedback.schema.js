@@ -7,6 +7,7 @@ const feedbackCreateSchema = z
     subject: z.string().max(200).optional(),
     message: z.string().min(1).max(2000),
     relatedPet: z.string().optional(),
+    application: z.string().optional(),
   })
   .strict();
 

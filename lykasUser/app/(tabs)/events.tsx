@@ -79,6 +79,17 @@ export default function EventsScreen() {
     }
   }
 
+  function confirmUnregister(event: EventItem) {
+    Alert.alert(
+      "Cancel registration?",
+      `You'll give up your spot for ${event.title}.`,
+      [
+        { text: "Keep my spot", style: "cancel" },
+        { text: "Cancel registration", style: "destructive", onPress: () => void unregister(event) },
+      ],
+    );
+  }
+
   async function unregister(event: EventItem) {
     setBusyEvent(event._id);
     try {
@@ -139,7 +150,7 @@ export default function EventsScreen() {
                 </View>
                 <Pressable
                   disabled={disabled}
-                  onPress={() => (registered ? unregister(item) : register(item))}
+                  onPress={() => (registered ? confirmUnregister(item) : register(item))}
                   className={`mt-3 items-center rounded-xl px-4 py-3 ${disabled ? "bg-border" : registered ? "bg-status-dangerBg" : "bg-primary"}`}
                 >
                   <Text className={`font-sans-medium text-sm ${disabled ? "text-mutedLight" : registered ? "text-status-danger" : "text-white"}`}>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, Pressable, Alert } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../utils/api";
@@ -18,7 +18,9 @@ const TYPES = [
 ] as const;
 
 export default function FeedbackScreen() {
-  const [type, setType] = useState<(typeof TYPES)[number]["value"]>("general");
+  // Opened from a completed adoption: the review is tied to that application.
+  const { applicationId } = useLocalSearchParams<{ applicationId?: string }>();
+  const [type, setType] = useState<(typeof TYPES)[number]["value"]>(applicationId ? "review" : "general");
   const [rating, setRating] = useState(0);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -45,13 +47,18 @@ export default function FeedbackScreen() {
       setError("Please share your feedback.");
       return;
     }
+    if (applicationId && !rating) {
+      setError("Please choose a star rating.");
+      return;
+    }
     setError(null);
     setSubmitting(true);
     try {
-      await api.post("/api/feedback", { type, rating: rating || undefined, subject, message });
+      await api.post("/api/feedback", { type, rating: rating || undefined, subject, message, application: applicationId || undefined });
       setMessage(""); setSubject(""); setRating(0);
       await loadFeedback();
       Alert.alert("Thank you", "Your feedback has been submitted.");
+      if (applicationId) router.back();
     } catch (err) {
       setError(getApiErrorMessage(err, "Failed to submit feedback"));
     } finally {
@@ -66,7 +73,7 @@ export default function FeedbackScreen() {
           <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back" className="p-1">
             <Ionicons name="chevron-back" size={22} color={colors.ink} />
           </Pressable>
-          <Text className="font-display text-xl text-ink">Share feedback</Text>
+          <Text className="font-display text-xl text-ink">{applicationId ? "Review your adoption" : "Share feedback"}</Text>
         </View>
 
         {error && (
@@ -75,7 +82,7 @@ export default function FeedbackScreen() {
           </View>
         )}
 
-        <View className="mb-4 flex-row flex-wrap gap-2">
+        {!applicationId && <View className="mb-4 flex-row flex-wrap gap-2">
           {TYPES.map((t) => (
             <Pressable
               key={t.value}
@@ -85,7 +92,7 @@ export default function FeedbackScreen() {
               <Text className={`font-sans-medium text-sm ${type === t.value ? "text-white" : "text-ink"}`}>{t.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </View>}
 
         {type === "review" && (
           <View className="mb-4 flex-row gap-1">

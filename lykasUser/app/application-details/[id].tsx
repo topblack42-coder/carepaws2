@@ -42,6 +42,7 @@ export default function ApplicationDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [application, setApplication] = useState<ApplicationDetail | null>(null);
   const [pickup, setPickup] = useState<Pickup | null>(null);
+  const [reviewed, setReviewed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +58,12 @@ export default function ApplicationDetailsScreen() {
     try {
       const res = await api.get(`/api/applications/${id}`);
       setApplication(res.data.data);
+      try {
+        const mine = await api.get("/api/feedback/my");
+        setReviewed((mine.data.data as Array<{ application?: string }>).some((f) => String(f.application) === String(id)));
+      } catch {
+        setReviewed(false); // The review prompt is optional; never block the page on it.
+      }
       try {
         // Newest pickup for this application (the list is sorted newest first).
         const pickups = await api.get("/api/adoption-pickups/my");
@@ -140,6 +147,29 @@ export default function ApplicationDetailsScreen() {
             );
           })}
         </View>
+
+        {application.type !== "foster" && application.stage === "completed" && (
+          <View className="mb-5 rounded-2xl border border-border bg-white p-4">
+            <View className="mb-2 flex-row items-center gap-2">
+              <Ionicons name="star-outline" size={18} color={colors.primary} />
+              <Text className="font-sans-medium text-sm text-ink">Your review</Text>
+            </View>
+            {reviewed ? (
+              <Text className="font-sans text-sm text-mintDeep">Thanks for reviewing your adoption!</Text>
+            ) : (
+              <>
+                <Text className="mb-3 font-sans text-sm text-muted">How was your adoption experience with {application.pet?.name ? `${application.pet.name} and ` : ""}CarePaws?</Text>
+                <Pressable
+                  onPress={() => router.push({ pathname: "/feedback", params: { applicationId: application._id } })}
+                  accessibilityRole="button"
+                  className="items-center rounded-xl bg-primary px-4 py-3"
+                >
+                  <Text className="font-sans-medium text-sm text-white">Leave a review</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        )}
 
         {application.type === "foster" && application.status === "approved" && (
           <View className="mb-5 rounded-xl bg-mintBg px-4 py-3">

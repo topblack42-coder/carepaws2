@@ -5,6 +5,7 @@ import { PageHeader } from "../components/ui/SharedUI";
 import DataTable, { type Column } from "../components/ui/DataTable";
 import StatusBadge from "../components/ui/StatusBadge";
 import { Select } from "../components/ui/FormUI";
+import ConfirmModal from "../components/ui/ConfirmModal";
 import { useToast } from "../context/ToastContext";
 
 interface InKindDonation {
@@ -24,6 +25,16 @@ export default function GoodsDonations() {
   const list = useResourceList<InKindDonation>("/api/donations/goods");
   const { showToast } = useToast();
   const [updating, setUpdating] = useState<string | null>(null);
+  const [pendingChange, setPendingChange] = useState<{ donation: InKindDonation; status: string } | null>(null);
+
+  // These two outcomes are hard to undo (inventory sync / cancelling a donor's gift), so ask first.
+  const NEEDS_CONFIRM = new Set(["received", "cancelled"]);
+
+  function requestStatusChange(donation: InKindDonation, status: string) {
+    if (status === donation.status) return;
+    if (NEEDS_CONFIRM.has(status)) setPendingChange({ donation, status });
+    else void updateStatus(donation, status);
+  }
 
   async function updateStatus(donation: InKindDonation, status: string) {
     setUpdating(donation._id);
@@ -35,6 +46,7 @@ export default function GoodsDonations() {
       showToast(getApiErrorMessage(err, "Failed to update donation"), "error");
     } finally {
       setUpdating(null);
+      setPendingChange(null);
     }
   }
 
@@ -88,7 +100,7 @@ export default function GoodsDonations() {
           <Select
             value={d.status}
             disabled={updating === d._id}
-            onChange={(e) => updateStatus(d, e.target.value)}
+            onChange={(e) => requestStatusChange(d, e.target.value)}
             className="w-auto text-xs"
             aria-label={`Update status for ${d.name}`}
           >
@@ -98,6 +110,21 @@ export default function GoodsDonations() {
             <option value="cancelled">Cancelled</option>
           </Select>
         )}
+      />
+
+      <ConfirmModal
+        isOpen={!!pendingChange}
+        title={pendingChange?.status === "received" ? "Mark donation as received?" : "Cancel this donation?"}
+        message={
+          pendingChange?.status === "received"
+            ? `"${pendingChange.donation.name}" will be recorded as received and added to inventory.`
+            : `"${pendingChange?.donation.name ?? ""}" will be marked as cancelled.`
+        }
+        confirmLabel={pendingChange?.status === "received" ? "Mark received" : "Cancel donation"}
+        variant={pendingChange?.status === "cancelled" ? "danger" : "primary"}
+        loading={!!pendingChange && updating === pendingChange.donation._id}
+        onConfirm={() => { if (pendingChange) void updateStatus(pendingChange.donation, pendingChange.status); }}
+        onCancel={() => setPendingChange(null)}
       />
     </div>
   );
