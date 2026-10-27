@@ -54,6 +54,9 @@ async function issueSession(user, req) {
   return { accessToken, refreshToken };
 }
 
+// Bump when the Privacy Policy / User Agreement text changes.
+const PRIVACY_POLICY_VERSION = "1.0";
+
 // POST /api/auth/register
 async function register(req, res, next) {
   try {
@@ -64,7 +67,14 @@ async function register(req, res, next) {
       return res.status(409).json({ success: false, message: "An account with this email already exists" });
     }
 
-    const user = await User.create({ displayName, email, password });
+    const user = await User.create({
+      displayName,
+      email,
+      password,
+      privacyAccepted: true,
+      privacyAcceptedAt: new Date(),
+      privacyPolicyVersion: PRIVACY_POLICY_VERSION,
+    });
 
     // The account is kept even if the email can't be sent; the client uses
     // emailSent to point the user at the resend flow.
@@ -170,7 +180,7 @@ async function login(req, res, next) {
 // POST /api/auth/google
 async function googleAuth(req, res, next) {
   try {
-    const { idToken } = req.body;
+    const { idToken, acceptedTerms } = req.body;
 
     const ticket = await googleClient.verifyIdToken({ idToken, audience: process.env.GOOGLE_CLIENT_ID });
     const payload = ticket.getPayload();
@@ -180,11 +190,22 @@ async function googleAuth(req, res, next) {
 
     let user = await User.findOne({ email: payload.email });
     if (!user) {
+      // New account via Google: consent must be given explicitly first.
+      if (acceptedTerms !== true) {
+        return res.status(400).json({
+          success: false,
+          code: "TERMS_REQUIRED",
+          message: "No account found. Please use Sign up and agree to the Privacy Policy and User Agreement first.",
+        });
+      }
       user = await User.create({
         displayName: payload.name || payload.email,
         email: payload.email,
         emailVerified: true,
         profilePicture: payload.picture,
+        privacyAccepted: true,
+        privacyAcceptedAt: new Date(),
+        privacyPolicyVersion: PRIVACY_POLICY_VERSION,
       });
     } else if (user.isDeleted) {
       // Same gap as login() above, reached via the Google path instead: an

@@ -30,10 +30,22 @@ beforeEach(async () => {
 });
 
 describe("Auth flow", () => {
+  it("rejects registration without accepting the privacy policy and user agreement", async () => {
+    const res = await request(app)
+      .post("/api/auth/register")
+      .send({ displayName: "No Consent", email: "noconsent@example.com", password: "password123" });
+    expect(res.status).toBe(400);
+
+    const res2 = await request(app)
+      .post("/api/auth/register")
+      .send({ displayName: "No Consent", email: "noconsent@example.com", password: "password123", acceptedTerms: false });
+    expect(res2.status).toBe(400);
+  });
+
   it("registers a new user and returns tokens", async () => {
     const res = await request(app)
       .post("/api/auth/register")
-      .send({ displayName: "Test User", email: "test@example.com", password: "password123" });
+      .send({ acceptedTerms: true, displayName: "Test User", email: "test@example.com", password: "password123" });
 
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
@@ -43,8 +55,8 @@ describe("Auth flow", () => {
   });
 
   it("rejects registering the same email twice", async () => {
-    await request(app).post("/api/auth/register").send({ displayName: "A", email: "dup@example.com", password: "password123" });
-    const res = await request(app).post("/api/auth/register").send({ displayName: "B", email: "dup@example.com", password: "password123" });
+    await request(app).post("/api/auth/register").send({ acceptedTerms: true, displayName: "A", email: "dup@example.com", password: "password123" });
+    const res = await request(app).post("/api/auth/register").send({ acceptedTerms: true, displayName: "B", email: "dup@example.com", password: "password123" });
 
     expect(res.status).toBe(409);
     expect(res.body.success).toBe(false);
@@ -53,14 +65,14 @@ describe("Auth flow", () => {
   it("rejects registration payloads with unknown fields (zod .strict())", async () => {
     const res = await request(app)
       .post("/api/auth/register")
-      .send({ displayName: "C", email: "c@example.com", password: "password123", isAdmin: true });
+      .send({ acceptedTerms: true, displayName: "C", email: "c@example.com", password: "password123", isAdmin: true });
 
     expect(res.status).toBe(400);
     expect(res.body.errors).toBeDefined();
   });
 
   it("logs in with correct credentials", async () => {
-    await request(app).post("/api/auth/register").send({ displayName: "D", email: "d@example.com", password: "password123" });
+    await request(app).post("/api/auth/register").send({ acceptedTerms: true, displayName: "D", email: "d@example.com", password: "password123" });
 
     const res = await request(app).post("/api/auth/login").send({ email: "d@example.com", password: "password123" });
 
@@ -69,7 +81,7 @@ describe("Auth flow", () => {
   });
 
   it("rejects login with a wrong password without revealing whether the account exists", async () => {
-    await request(app).post("/api/auth/register").send({ displayName: "E", email: "e@example.com", password: "password123" });
+    await request(app).post("/api/auth/register").send({ acceptedTerms: true, displayName: "E", email: "e@example.com", password: "password123" });
 
     const res = await request(app).post("/api/auth/login").send({ email: "e@example.com", password: "wrongpassword" });
 
@@ -78,7 +90,7 @@ describe("Auth flow", () => {
   });
 
   it("locks the account after 5 consecutive failed logins", async () => {
-    await request(app).post("/api/auth/register").send({ displayName: "F", email: "f@example.com", password: "password123" });
+    await request(app).post("/api/auth/register").send({ acceptedTerms: true, displayName: "F", email: "f@example.com", password: "password123" });
 
     for (let i = 0; i < 5; i++) {
       await request(app).post("/api/auth/login").send({ email: "f@example.com", password: "wrongpassword" });
@@ -99,7 +111,7 @@ describe("Auth flow", () => {
 
     const register = await request(app)
       .post("/api/auth/register")
-      .send({ displayName: "G", email: "g@example.com", password: "password123" });
+      .send({ acceptedTerms: true, displayName: "G", email: "g@example.com", password: "password123" });
 
     const me = await request(app).get("/api/auth/me").set("Authorization", `Bearer ${register.body.data.accessToken}`);
     expect(me.status).toBe(200);
@@ -109,7 +121,7 @@ describe("Auth flow", () => {
   it("refresh rotates the refresh token — the old one can't be reused", async () => {
     const register = await request(app)
       .post("/api/auth/register")
-      .send({ displayName: "H", email: "h@example.com", password: "password123" });
+      .send({ acceptedTerms: true, displayName: "H", email: "h@example.com", password: "password123" });
 
     const oldRefresh = register.body.data.refreshToken;
 
@@ -124,7 +136,7 @@ describe("Auth flow", () => {
   it("logout blacklists the access token so it can no longer authenticate", async () => {
     const register = await request(app)
       .post("/api/auth/register")
-      .send({ displayName: "I", email: "i@example.com", password: "password123" });
+      .send({ acceptedTerms: true, displayName: "I", email: "i@example.com", password: "password123" });
 
     const token = register.body.data.accessToken;
 
@@ -136,7 +148,7 @@ describe("Auth flow", () => {
   });
 
   it("password reset flow: request -> reset -> old sessions revoked", async () => {
-    await request(app).post("/api/auth/register").send({ displayName: "J", email: "j@example.com", password: "password123" });
+    await request(app).post("/api/auth/register").send({ acceptedTerms: true, displayName: "J", email: "j@example.com", password: "password123" });
 
     const forgotRes = await request(app).post("/api/auth/forgot-password").send({ email: "j@example.com" });
     expect(forgotRes.status).toBe(200);
@@ -154,7 +166,7 @@ describe("Auth flow", () => {
   it("rejects an access token issued before the last password change", async () => {
     const register = await request(app)
       .post("/api/auth/register")
-      .send({ displayName: "K", email: "k@example.com", password: "password123" });
+      .send({ acceptedTerms: true, displayName: "K", email: "k@example.com", password: "password123" });
 
     const token = register.body.data.accessToken;
 

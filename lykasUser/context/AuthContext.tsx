@@ -28,9 +28,9 @@ interface AuthContextValue {
   // router.replace("/onboarding") call.
   justRegistered: boolean;
   // emailSent is false when the account was created but the verification email could not be sent.
-  register: (displayName: string, email: string, password: string) => Promise<{ emailSent: boolean }>;
+  register: (displayName: string, email: string, password: string, acceptedTerms: boolean) => Promise<{ emailSent: boolean }>;
   login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: (idToken: string) => Promise<void>;
+  loginWithGoogle: (idToken: string, acceptedTerms?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   // Google sign-in is shared between the login and sign-up screens (same
@@ -96,8 +96,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEmailNotVerifiedHandler(() => promptVerifyEmail());
   }, [loadMe]);
 
-  const register = useCallback(async (displayName: string, email: string, password: string) => {
-    const res = await api.post("/api/auth/register", { displayName, email, password });
+  const register = useCallback(async (displayName: string, email: string, password: string, acceptedTerms: boolean) => {
+    const res = await api.post("/api/auth/register", { displayName, email, password, acceptedTerms });
     const { user: newUser, accessToken, refreshToken, emailSent, emailSkipped } = res.data.data;
 
     // Defensive: require both tokens from the server before committing session
@@ -131,8 +131,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSkipLoadMeOnce(true);
   }, []);
 
-  const loginWithGoogle = useCallback(async (idToken: string) => {
-    const res = await api.post("/api/auth/google", { idToken, platform: "mobile" });
+  const loginWithGoogle = useCallback(async (idToken: string, acceptedTerms?: boolean) => {
+    const res = await api.post("/api/auth/google", { idToken, platform: "mobile", acceptedTerms });
     const { user: loggedInUser, accessToken, refreshToken } = res.data.data;
 
     // Defensive: ensure tokens are present

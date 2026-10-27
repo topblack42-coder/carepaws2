@@ -9,7 +9,7 @@
  * static marketing content with no API calls, so there's no harm in it
  * being reachable pre-auth too.
  */
-export const PUBLIC_ROUTES = new Set(["onboarding", "forgot-password", "reset-password", "verify-email", "help", "+not-found"]);
+export const PUBLIC_ROUTES = new Set(["onboarding", "forgot-password", "reset-password", "verify-email", "help", "legal", "+not-found"]);
 
 /**
  * Pure decision function for the root navigation guard: given the current

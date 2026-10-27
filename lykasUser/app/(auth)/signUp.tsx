@@ -8,6 +8,7 @@ import { useAuth } from "../../context/AuthContext";
 import { getApiErrorMessage } from "../../utils/api";
 import PrimaryButton from "../../components/PrimaryButton";
 import FormInput from "../../components/FormInput";
+import ConsentCheckbox from "../../components/ConsentCheckbox";
 import colors from "../../utils/colors";
 import { getGoogleIdToken } from "../../utils/googleAuth";
 import { promptVerifyEmail } from "../../utils/emailVerification";
@@ -21,10 +22,15 @@ export default function SignUpScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [accepted, setAccepted] = useState(false);
 
   async function handleSignUp() {
     setError(null);
 
+    if (!accepted) {
+      setError("Please agree to the Privacy Policy and User Agreement to continue.");
+      return;
+    }
     if (password !== confirmPassword) {
       setError("Passwords don't match.");
       return;
@@ -36,7 +42,7 @@ export default function SignUpScreen() {
 
     setLoading(true);
     try {
-      const result = await register(displayName, email, password);
+      const result = await register(displayName, email, password, accepted);
       // The nav guard moves the new user on to onboarding right away, so
       // these are Alerts (they outlive this screen) rather than inline text.
       if (result?.emailSent === false) {
@@ -62,6 +68,10 @@ export default function SignUpScreen() {
 
   async function handleGoogleSignUp() {
     setError(null);
+    if (!accepted) {
+      setError("Please agree to the Privacy Policy and User Agreement to continue.");
+      return;
+    }
     setGoogleLoading(true);
     try {
       const idToken = await getGoogleIdToken();
@@ -70,7 +80,7 @@ export default function SignUpScreen() {
       // justRegistered itself — mark it here, from the screen that knows
       // this call means "sign up," before the shared context method runs.
       markJustRegistered();
-      await loginWithGoogle(idToken);
+      await loginWithGoogle(idToken, accepted);
       // No router.replace here — see the comment in handleSignUp above.
     } catch (err) {
       setError(getApiErrorMessage(err, "Google sign-in failed"));
@@ -99,7 +109,9 @@ export default function SignUpScreen() {
         <FormInput label="Password" value={password} onChangeText={setPassword} isPassword testID="signup-password" />
         <FormInput label="Confirm password" value={confirmPassword} onChangeText={setConfirmPassword} isPassword testID="signup-confirm" />
 
-        <PrimaryButton label="Create account" onPress={handleSignUp} loading={loading} className="mt-2" testID="signup-submit" />
+        <ConsentCheckbox checked={accepted} onChange={setAccepted} testID="signup-consent" />
+
+        <PrimaryButton label="Create account" onPress={handleSignUp} loading={loading} disabled={!accepted} className="mt-2" testID="signup-submit" />
 
         <View className="my-5 flex-row items-center gap-3">
           <View className="h-px flex-1 bg-border" />
@@ -107,7 +119,7 @@ export default function SignUpScreen() {
           <View className="h-px flex-1 bg-border" />
         </View>
 
-        <PrimaryButton label="Continue with Google" variant="secondary" onPress={handleGoogleSignUp} loading={googleLoading} />
+        <PrimaryButton label="Continue with Google" variant="secondary" onPress={handleGoogleSignUp} loading={googleLoading} disabled={!accepted} />
 
         <View className="mt-8 flex-row justify-center gap-1">
           <Text className="font-sans text-sm text-muted">Already have an account?</Text>

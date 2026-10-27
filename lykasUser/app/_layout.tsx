@@ -101,6 +101,7 @@ function RootNavigation() {
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="legal" />
         <Stack.Screen name="+not-found" />
       </Stack>
       <UpdateBanner />

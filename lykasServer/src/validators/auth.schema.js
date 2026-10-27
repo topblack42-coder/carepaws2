@@ -5,6 +5,9 @@ const registerSchema = z
     displayName: z.string().min(2).max(100),
     email: z.string().email(),
     password: z.string().min(8).max(128),
+    acceptedTerms: z.literal(true, {
+      errorMap: () => ({ message: "You must agree to the Privacy Policy and User Agreement" }),
+    }),
   })
   .strict();
 
@@ -19,6 +22,8 @@ const googleAuthSchema = z
   .object({
     idToken: z.string().min(10),
     platform: z.enum(["mobile", "web"]).optional(),
+    // Required only when the Google account has no CarePaws account yet.
+    acceptedTerms: z.boolean().optional(),
   })
   .strict();
 

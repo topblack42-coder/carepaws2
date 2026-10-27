@@ -12,6 +12,11 @@ const userSchema = new mongoose.Schema(
     // (15 min) expiry even after the password that could mint it changes.
     passwordChangedAt: { type: Date, default: null },
 
+    // Consent record (Privacy Policy + User Agreement), captured at sign-up.
+    privacyAccepted: { type: Boolean, default: false },
+    privacyAcceptedAt: { type: Date, default: null },
+    privacyPolicyVersion: { type: String, default: null },
+
     emailVerified: { type: Boolean, default: false },
     emailVerificationToken: { type: String, select: false },
     emailVerificationExpires: { type: Date, select: false },
