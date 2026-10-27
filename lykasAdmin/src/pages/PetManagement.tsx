@@ -47,7 +47,8 @@ export default function PetManagement() {
 
   const [status, setStatus] = useState("Available");
   const [shelterId, setShelterId] = useState("");
-  const [shelters, setShelters] = useState<{ _id: string; name: string; status: string; capacity: number; currentOccupancy: number }[]>([]);
+  // Hidden for now (shelter/cage management):
+  // const [shelters, setShelters] = useState<{ _id: string; name: string; status: string; capacity: number; currentOccupancy: number }[]>([]);
   const [healthStatus, setHealthStatus] = useState("");
   const [description, setDescription] = useState("");
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -82,7 +83,7 @@ export default function PetManagement() {
   }, []);
 
   useEffect(() => {
-    api.get("/api/shelters").then((res) => setShelters(res.data.data ?? [])).catch(() => setShelters([]));
+    // api.get("/api/shelters").then((res) => setShelters(res.data.data ?? [])).catch(() => setShelters([]));
   }, []);
 
   useEffect(() => {
@@ -220,6 +221,7 @@ export default function PetManagement() {
                       <option value="Foster">Foster</option>
                     </Select>
                   </FormField>
+                  {/* Hidden for now (shelter/cage management):
                   <FormField label="Shelter" htmlFor="pm-shelter">
                     <Select id="pm-shelter" value={shelterId} onChange={(e) => setShelterId(e.target.value)}>
                       <option value="">No shelter assigned</option>
@@ -230,6 +232,7 @@ export default function PetManagement() {
                       ))}
                     </Select>
                   </FormField>
+                  */}
 
                   <FormField label="Health status" htmlFor="pm-health">
                     <Input id="pm-health" value={healthStatus} onChange={(e) => setHealthStatus(e.target.value)} />
@@ -278,11 +281,13 @@ export default function PetManagement() {
                       {careSummary.latestFeeding.eaten}
                     </p>
                   )}
+                  {/* Hidden for now (shelter/cage management):
                   {careSummary?.activeCage && (
                     <p className="mt-1 text-sm text-gray-600">
                       Cage: {careSummary.activeCage.cageNumber} ({careSummary.activeCage.section})
                     </p>
                   )}
+                  */}
                   {careSummary?.activeQuarantine && (
                     <p className="mt-1 flex items-center gap-1 text-sm text-status-danger">
                       <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />

@@ -97,10 +97,10 @@ interface PetFieldsProps {
   shelters?: ShelterOption[];
 }
 
-export function PetFields({ idPrefix, values, onChange, shelters = [] }: PetFieldsProps) {
+export function PetFields({ idPrefix, values, onChange }: PetFieldsProps) {
   const id = (n: string) => `${idPrefix}-${n}`;
   // Keep a pet's current shelter selectable even if the shelter list hasn't loaded / was filtered.
-  const hasCurrentShelter = !values.shelterId || shelters.some((s) => s._id === values.shelterId);
+  // Hidden for now (shelter/cage management): const hasCurrentShelter = !values.shelterId || shelters.some((s) => s._id === values.shelterId);
 
   return (
     <>
@@ -151,6 +151,7 @@ export function PetFields({ idPrefix, values, onChange, shelters = [] }: PetFiel
             <option value="High">High</option>
           </Select>
         </FormField>
+        {/* Hidden for now (shelter/cage management):
         <FormField label="Shelter (optional)" htmlFor={id("shelter")}>
           <Select id={id("shelter")} value={values.shelterId} onChange={(e) => onChange({ shelterId: e.target.value })}>
             <option value="">Not assigned</option>
@@ -162,6 +163,7 @@ export function PetFields({ idPrefix, values, onChange, shelters = [] }: PetFiel
             ))}
           </Select>
         </FormField>
+        */}
       </div>
 
       <FormField label="Temperament (optional)" htmlFor={id("temperament")}>

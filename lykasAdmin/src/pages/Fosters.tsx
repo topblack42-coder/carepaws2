@@ -37,6 +37,9 @@ export default function Fosters() {
   const [applicationId, setApplicationId] = useState("");
   const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [trialDurationDays, setTrialDurationDays] = useState("30");
+  const [pickupDate, setPickupDate] = useState("");
+  const [pickupMethod, setPickupMethod] = useState("Shelter pickup");
+  const [pickupLocation, setPickupLocation] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +54,9 @@ export default function Fosters() {
   async function openPlacementModal() {
     setError(null);
     setApplicationId("");
+    setPickupDate("");
+    setPickupMethod("Shelter pickup");
+    setPickupLocation("");
     try {
       const res = await api.get("/api/applications", {
         params: { status: "approved", stage: "approved", type: "foster", limit: 100 },
@@ -74,6 +80,10 @@ export default function Fosters() {
       setError("Foster trial duration must be between 30 and 60 days.");
       return;
     }
+    if (pickupDate && pickupMethod === "Home delivery" && !pickupLocation.trim()) {
+      setError("A delivery address is required for home delivery.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -84,7 +94,21 @@ export default function Fosters() {
         startDate: new Date(`${startDate}T00:00:00`).toISOString(),
         trialDurationDays: duration,
       });
-      showToast("Foster placement started", "success");
+      if (pickupDate) {
+        try {
+          await api.post("/api/adoption-pickups", {
+            application: application._id,
+            scheduledDate: pickupDate,
+            method: pickupMethod,
+            location: pickupLocation.trim() || undefined,
+          });
+          showToast("Foster placement started and pickup scheduled", "success");
+        } catch (err) {
+          showToast(`Placement started, but the pickup was not scheduled: ${getApiErrorMessage(err, "unknown error")}`, "error");
+        }
+      } else {
+        showToast("Foster placement started", "success");
+      }
       setCreating(false);
       list.reload();
     } catch (err) {
@@ -147,6 +171,23 @@ export default function Fosters() {
           <FormField label="Trial duration (days)" htmlFor="foster-duration">
             <Input id="foster-duration" type="number" min={30} max={60} required value={trialDurationDays} onChange={(e) => setTrialDurationDays(e.target.value)} />
           </FormField>
+          <p className="mb-2 mt-4 text-sm font-semibold text-gray-700">Pet pickup (optional)</p>
+          <FormField label="Pickup date & time" htmlFor="foster-pickup-date">
+            <Input id="foster-pickup-date" type="datetime-local" value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} />
+          </FormField>
+          {pickupDate && (
+            <>
+              <FormField label="Method" htmlFor="foster-pickup-method">
+                <Select id="foster-pickup-method" value={pickupMethod} onChange={(e) => setPickupMethod(e.target.value)}>
+                  <option value="Shelter pickup">Shelter pickup</option>
+                  <option value="Home delivery">Home delivery</option>
+                </Select>
+              </FormField>
+              <FormField label={pickupMethod === "Home delivery" ? "Delivery address" : "Location (defaults to the shelter)"} htmlFor="foster-pickup-location">
+                <Input id="foster-pickup-location" value={pickupLocation} onChange={(e) => setPickupLocation(e.target.value)} />
+              </FormField>
+            </>
+          )}
         </form>
       </Modal>
     </div>

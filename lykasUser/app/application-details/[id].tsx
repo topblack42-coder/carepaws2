@@ -171,13 +171,7 @@ export default function ApplicationDetailsScreen() {
           </View>
         )}
 
-        {application.type === "foster" && application.status === "approved" && (
-          <View className="mb-5 rounded-xl bg-mintBg px-4 py-3">
-            <Text className="font-sans-medium text-sm text-mintDeep">Our team will contact you to start the foster placement.</Text>
-          </View>
-        )}
-
-        {application.type !== "foster" && application.status === "approved" && (
+        {application.status === "approved" && (
           <View className="mb-5 rounded-2xl border border-border bg-white p-4">
             <View className="mb-2 flex-row items-center gap-2">
               <Ionicons name="calendar-outline" size={18} color={colors.primary} />
@@ -193,7 +187,7 @@ export default function ApplicationDetailsScreen() {
               </>
             ) : pickup?.status === "completed" ? (
               <Text className="font-sans text-sm text-mintDeep">
-                Your pet was handed over{pickup.scheduledDate ? ` on ${formatDateTime(pickup.scheduledDate)}` : ""}. Congratulations!
+                Your pet was handed over{pickup.scheduledDate ? ` on ${formatDateTime(pickup.scheduledDate)}` : ""}.{application.type === "foster" ? " Thank you for fostering!" : " Congratulations!"}
               </Text>
             ) : pickup && (pickup.status === "cancelled" || pickup.status === "no-show") ? (
               <Text className="font-sans text-sm text-muted">

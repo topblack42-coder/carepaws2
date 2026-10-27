@@ -48,14 +48,15 @@ async function getOne(req, res, next) {
   }
 }
 
-// POST /api/adoption-pickups — schedule the handover of an approved adoption.
+// POST /api/adoption-pickups — schedule the handover of an approved adoption or foster pet.
 async function create(req, res, next) {
   try {
     const application = await Application.findById(req.body.application);
     if (!application) return res.status(404).json({ success: false, message: "Application not found" });
-    if (application.type !== "adoption") throw fail(409, "Pickup scheduling is only for adoption applications");
+    const isFoster = application.type === "foster";
     if (application.status !== "approved") throw fail(409, "Only an approved application can be scheduled for pickup");
-    if (!["approved", "adoption_scheduled"].includes(application.stage)) {
+    // Foster applications stay at "approved" (the foster placement requires it); adoptions move on to "adoption_scheduled".
+    if (!(isFoster ? ["approved"] : ["approved", "adoption_scheduled"]).includes(application.stage)) {
       throw fail(409, "This application is not waiting for a pickup");
     }
     const active = await AdoptionPickup.exists({ application: application._id, status: "scheduled" });
@@ -70,7 +71,7 @@ async function create(req, res, next) {
     });
 
     // First pickup moves the pipeline forward; a rescheduled one after a cancellation stays put.
-    if (application.stage === "approved") {
+    if (!isFoster && application.stage === "approved") {
       await advanceApplicationStage(application, "adoption_scheduled", req.user._id, `Pickup scheduled for ${new Date(pickup.scheduledDate).toLocaleString()}`);
     }
 
@@ -130,10 +131,14 @@ async function complete(req, res, next) {
 
     const application = await Application.findById(pickup.application);
     if (!application) return res.status(404).json({ success: false, message: "Application not found" });
-    if (application.stage !== "adoption_scheduled") throw fail(409, "Application is not at the adoption scheduled stage");
-
-    // Advance first: if the stage rules reject it, the pickup stays scheduled.
-    await advanceApplicationStage(application, "completed", req.user._id, "Pet handed over to adopter");
+    const isFoster = application.type === "foster";
+    if (isFoster) {
+      if (application.stage !== "approved") throw fail(409, "Foster application is not approved");
+    } else {
+      if (application.stage !== "adoption_scheduled") throw fail(409, "Application is not at the adoption scheduled stage");
+      // Advance first: if the stage rules reject it, the pickup stays scheduled.
+      await advanceApplicationStage(application, "completed", req.user._id, "Pet handed over to adopter");
+    }
 
     pickup.status = "completed";
     pickup.completedAt = new Date();
@@ -144,8 +149,10 @@ async function complete(req, res, next) {
     await notifyOnce({
       recipient: pickup.applicant,
       type: "ADOPTION_PICKUP_COMPLETED",
-      title: "Adoption complete",
-      message: "Your pet has been handed over. Congratulations on your new family member! Tell us how it went — open your application to leave a review.",
+      title: isFoster ? "Foster pet handed over" : "Adoption complete",
+      message: isFoster
+        ? "Your foster pet has been handed over. Thank you for opening your home! Please submit your weekly reports while the pet is in your care."
+        : "Your pet has been handed over. Congratulations on your new family member! Tell us how it went — open your application to leave a review.",
       refModel: "AdoptionPickup",
       refId: pickup._id,
     });

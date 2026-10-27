@@ -115,11 +115,14 @@ export default function AdoptionScheduling() {
 
   const scheduledAppIds = new Set(pickups.rows.filter((p) => p.status === "scheduled").map((p) => p.application));
   const readyForPickup = applications.rows.filter(
-    (a) => a.type === "adoption" && a.status === "approved" && (a.stage === "approved" || a.stage === "adoption_scheduled") && !scheduledAppIds.has(a._id)
+    (a) =>
+      a.status === "approved" &&
+      (a.type === "foster" ? a.stage === "approved" : a.type === "adoption" && (a.stage === "approved" || a.stage === "adoption_scheduled")) &&
+      !scheduledAppIds.has(a._id)
   );
 
   const pickupColumns: Column<Pickup>[] = [
-    { key: "applicant", header: "Adopter", accessor: (p) => p.applicant?.displayName ?? "—" },
+    { key: "applicant", header: "Adopter / Fosterer", accessor: (p) => p.applicant?.displayName ?? "—" },
     { key: "pet", header: "Pet", accessor: (p) => p.pet?.name ?? "—" },
     { key: "scheduledDate", header: "Pickup date", accessor: (p) => new Date(p.scheduledDate).toLocaleString() },
     { key: "method", header: "Method", accessor: (p) => p.method },
@@ -232,7 +235,7 @@ export default function AdoptionScheduling() {
             <FormField label="Approved application" htmlFor="pickup-application">
               <Select id="pickup-application" required value={applicationId} onChange={(e) => setApplicationId(e.target.value)}>
                 <option value="">Select an application</option>
-                {readyForPickup.map((a) => <option key={a._id} value={a._id}>{a.applicant?.displayName} — {a.pet?.name}</option>)}
+                {readyForPickup.map((a) => <option key={a._id} value={a._id}>{a.applicant?.displayName} — {a.pet?.name}{a.type === "foster" ? " (foster)" : ""}</option>)}
               </Select>
             </FormField>
           )}

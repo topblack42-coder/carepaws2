@@ -65,8 +65,9 @@ import NotificationsAdmin from "./pages/NotificationsAdmin";
 import Accounts from "./pages/Accounts";
 import StaffManagement from "./pages/StaffManagement";
 import UserVerification from "./pages/UserVerification";
-import ShelterManagement from "./pages/ShelterManagement";
-import CageManagement from "./pages/CageManagement";
+// Hidden for now:
+// import ShelterManagement from "./pages/ShelterManagement";
+// import CageManagement from "./pages/CageManagement";
 
 // System
 import AuditLogs from "./pages/AuditLogs";
@@ -159,8 +160,9 @@ export default function App() {
           <Route path="/accounts" element={<Protected roles={["admin", "super_admin"]}><Accounts /></Protected>} />
           <Route path="/staff" element={<Protected roles={["super_admin"]}><StaffManagement /></Protected>} />
           <Route path="/verification" element={<Protected roles={["admin", "super_admin"]}><UserVerification /></Protected>} />
+          {/* Hidden for now:
           <Route path="/shelters" element={<Protected roles={["admin", "super_admin"]}><ShelterManagement /></Protected>} />
-          <Route path="/cages" element={<Protected roles={["admin", "super_admin"]}><CageManagement /></Protected>} />
+          <Route path="/cages" element={<Protected roles={["admin", "super_admin"]}><CageManagement /></Protected>} /> */}
 
           {/* System */}
           <Route path="/audit-logs" element={<Protected roles={["super_admin"]}><AuditLogs /></Protected>} />

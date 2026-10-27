@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { PawPrint, FileText, HandHeart, DollarSign, Building2 } from "lucide-react";
+import { PawPrint, FileText, HandHeart, DollarSign } from "lucide-react";
 import { api, getApiErrorMessage } from "../services/api";
 import { PageHeader, StatCard, Card } from "../components/ui/SharedUI";
 import { LoadingState, ErrorState } from "../components/ui/StateDisplays";
@@ -57,11 +57,13 @@ export default function Dashboard() {
     <div>
       <PageHeader title="Dashboard" description="A snapshot of what's happening at the shelter right now." />
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Total pets" value={totalPets} hint={`${availableCount} available`} />
         <StatCard label="Pending applications" value={data.pendingApplications} />
         <StatCard label="Pending volunteer applications" value={data.pendingVolunteers} />
+        {/* Hidden for now (shelter/cage management):
         <StatCard label="Shelter occupancy" value={`${data.shelterStats.totalOccupancy}/${data.shelterStats.totalCapacity}`} hint={`${data.shelterStats.occupancyPercentage}% · ${data.shelterStats.availableCapacity} spaces available`} />
+        */}
       </div>
 
       <Card>
@@ -83,6 +85,7 @@ export default function Dashboard() {
         </div>
       </Card>
 
+      {/* Hidden for now (shelter/cage management):
       <Card className="mt-4">
         <div className="flex items-center gap-3">
           <Building2 className="h-5 w-5 text-primary" aria-hidden="true" />
@@ -93,6 +96,7 @@ export default function Dashboard() {
           </div>
         </div>
       </Card>
+      */}
 
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card className="flex items-center gap-3">
