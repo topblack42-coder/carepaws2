@@ -171,19 +171,40 @@ describe("Adoption application form", () => {
       expect(api.post).not.toHaveBeenCalled();
     });
 
-    it("posts type foster with fosterPeriod and shows foster success text", async () => {
+    it("sends the preferred pickup date and method only when the applicant picks one", async () => {
       jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
       render(<ApplyToPetScreen />);
 
       fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
       fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
-      fireEvent.changeText(screen.getByTestId("apply-foster-period"), "4 weeks");
+      fireEvent.press(screen.getByTestId("apply-foster-30"));
+      fireEvent.press(screen.getByTestId("apply-submit"));
+      await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(api.post).mock.calls[0][1]).not.toHaveProperty("preferredPickupDate");
+
+      jest.mocked(api.post).mockClear();
+      fireEvent.press(screen.getAllByTestId(/^apply-pickup-\d{4}-\d{2}-\d{2}$/)[2]);
+      fireEvent.press(screen.getByText("Deliver to my home"));
+      fireEvent.press(screen.getByTestId("apply-submit"));
+      await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
+      expect(jest.mocked(api.post).mock.calls[0][1]).toEqual(
+        expect.objectContaining({ preferredPickupDate: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), preferredPickupMethod: "Home delivery" })
+      );
+    });
+
+    it("posts type foster with the chosen foster days and shows foster success text", async () => {
+      jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
+      render(<ApplyToPetScreen />);
+
+      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
+      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
+      fireEvent.press(screen.getByTestId("apply-foster-45"));
       fireEvent.press(screen.getByTestId("apply-submit"));
 
       await waitFor(() =>
         expect(api.post).toHaveBeenCalledWith(
           "/api/applications",
-          expect.objectContaining({ pet: "pet1", type: "foster", fosterPeriod: "4 weeks" })
+          expect.objectContaining({ pet: "pet1", type: "foster", fosterDays: 45, fosterPeriod: "45 days" })
         )
       );
       await waitFor(() =>

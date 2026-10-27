@@ -35,6 +35,7 @@ const IGNORED_MODELS = new Set([
   "Session",
   "TokenBlacklist",
   "ScheduledJobLog",
+  "DailyVisit", // written by the visit tracker, not user-facing data
   "Message", // chat has its own dedicated receiveMessage event
 ]);
 

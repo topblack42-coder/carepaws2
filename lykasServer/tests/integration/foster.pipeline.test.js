@@ -64,6 +64,15 @@ async function createApprovedFosterApplication(applicantToken, staffToken, pet) 
   return approved.body.data;
 }
 
+async function schedulePickup(staffToken, applicationId, scheduledDate = "2026-08-23T09:00:00.000Z") {
+  const res = await request(app)
+    .post("/api/adoption-pickups")
+    .set("Authorization", `Bearer ${staffToken}`)
+    .send({ application: applicationId, scheduledDate, method: "Shelter pickup" });
+  expect(res.status).toBe(201);
+  return res.body.data;
+}
+
 describe("Foster placement pipeline", () => {
   let applicantToken;
   let staffToken;
@@ -81,6 +90,7 @@ describe("Foster placement pipeline", () => {
 
   it("creates a placement only from the approved foster application and tracks a 30-day trial", async () => {
     const application = await createApprovedFosterApplication(applicantToken, staffToken, pet);
+    await schedulePickup(staffToken, application._id);
 
     const startDate = new Date("2026-08-23T00:00:00.000Z");
     const res = await request(app)
@@ -134,6 +144,7 @@ describe("Foster placement pipeline", () => {
 
   it("persists one report per week and derives the submitted count from stored reports", async () => {
     const application = await createApprovedFosterApplication(applicantToken, staffToken, pet);
+    await schedulePickup(staffToken, application._id);
     const placement = await request(app)
       .post("/api/foster")
       .set("Authorization", `Bearer ${staffToken}`)
@@ -280,6 +291,78 @@ describe("Foster placement pipeline", () => {
       await runFosterReportMonitoring();
       expect(await WeeklyFosterReport.countDocuments({ foster: foster._id })).toBe(0);
     }
+  });
+
+  it("requires a scheduled pickup, and the foster period cannot start before it", async () => {
+    const application = await createApprovedFosterApplication(applicantToken, staffToken, pet);
+    const body = {
+      application: application._id,
+      pet: pet._id.toString(),
+      fosterer: applicantUserId,
+      startDate: "2026-08-23T00:00:00.000Z",
+      trialDurationDays: 30,
+    };
+
+    const noPickup = await request(app).post("/api/foster").set("Authorization", `Bearer ${staffToken}`).send(body);
+    expect(noPickup.status).toBe(409);
+
+    await schedulePickup(staffToken, application._id, "2026-08-25T09:00:00.000Z");
+    const tooEarly = await request(app).post("/api/foster").set("Authorization", `Bearer ${staffToken}`).send(body);
+    expect(tooEarly.status).toBe(409);
+    expect(await Foster.countDocuments()).toBe(0);
+  });
+
+  it("moves the foster period when its pickup is rescheduled", async () => {
+    const application = await createApprovedFosterApplication(applicantToken, staffToken, pet);
+    const pickup = await schedulePickup(staffToken, application._id);
+    const placement = await request(app)
+      .post("/api/foster")
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ application: application._id, pet: pet._id.toString(), fosterer: applicantUserId, startDate: "2026-08-23T09:00:00.000Z", trialDurationDays: 30 });
+    expect(placement.status).toBe(201);
+
+    const moved = await request(app)
+      .put(`/api/adoption-pickups/${pickup._id}`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ scheduledDate: "2026-08-30T09:00:00.000Z" });
+    expect(moved.status).toBe(200);
+
+    const stored = await Foster.findById(placement.body.data._id);
+    expect(stored.startDate.toISOString()).toBe("2026-08-30T09:00:00.000Z");
+    expect(stored.expectedEndDate.toISOString()).toBe("2026-09-29T09:00:00.000Z");
+  });
+
+  it("extends an active foster instead of closing it, capped at 30 extra days", async () => {
+    const foster = await Foster.create({
+      pet: pet._id,
+      fosterer: applicantUserId,
+      application: new (require("mongoose").Types.ObjectId)(),
+      startDate: new Date("2026-08-23T00:00:00.000Z"),
+      expectedEndDate: new Date("2026-09-22T00:00:00.000Z"),
+      trialDurationDays: 30,
+      weeklyReportsRequired: 5,
+      status: "active",
+    });
+    await Pet.findByIdAndUpdate(pet._id, { status: "Foster" });
+
+    const extended = await request(app)
+      .put(`/api/foster/${foster._id}/end`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ outcome: "EXTENDED", extensionDays: 14 });
+    expect(extended.status).toBe(200);
+    const stored = await Foster.findById(foster._id);
+    expect(stored.status).toBe("active");
+    expect(stored.extendedDays).toBe(14);
+    expect(stored.trialDurationDays).toBe(44);
+    expect(stored.weeklyReportsRequired).toBe(7);
+    expect(stored.expectedEndDate.toISOString()).toBe("2026-10-06T00:00:00.000Z");
+    expect((await Pet.findById(pet._id)).status).toBe("Foster");
+
+    const tooMuch = await request(app)
+      .put(`/api/foster/${foster._id}/end`)
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ outcome: "EXTENDED", extensionDays: 20 });
+    expect(tooMuch.status).toBe(409);
   });
 
 });

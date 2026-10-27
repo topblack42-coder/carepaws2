@@ -1,6 +1,7 @@
 const { verifyAccessToken } = require("../utils/tokens");
 const TokenBlacklist = require("../models/TokenBlacklist");
 const User = require("../models/User");
+const { recordVisit } = require("../utils/visitTracker");
 
 async function protect(req, res, next) {
   try {
@@ -48,6 +49,7 @@ async function protect(req, res, next) {
 
     req.user = user;
     req.token = token;
+    recordVisit(user);
     next();
   } catch (err) {
     next(err);

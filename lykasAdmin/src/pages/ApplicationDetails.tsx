@@ -38,6 +38,8 @@ interface ApplicationDetail {
   landlordApproval?: boolean;
   type: "adoption" | "foster";
   fosterPeriod?: string;
+  preferredPickupDate?: string;
+  preferredPickupMethod?: string;
   status: "pending" | "approved" | "rejected";
   stage: ApplicationStage;
   createdAt: string;
@@ -295,6 +297,13 @@ export default function ApplicationDetails() {
               <Field label="Renting">{application.isRenting ? "Yes" : "No"}</Field>
               <Field label="Landlord approval">{application.isRenting ? (application.landlordApproval ? "Yes" : "No") : "N/A"}</Field>
               {application.type === "foster" && <Field label="Foster period">{application.fosterPeriod || NOT_PROVIDED}</Field>}
+              {application.type === "foster" && (
+                <Field label="Preferred pickup">
+                  {application.preferredPickupDate
+                    ? `${new Date(application.preferredPickupDate).toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })}${application.preferredPickupMethod ? ` · ${application.preferredPickupMethod}` : ""}`
+                    : NOT_PROVIDED}
+                </Field>
+              )}
               <Field label="Experience" wide>{application.experience || NOT_PROVIDED}</Field>
             </dl>
           </Card>

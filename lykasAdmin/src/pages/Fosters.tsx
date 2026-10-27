@@ -8,6 +8,7 @@ import StatusBadge from "../components/ui/StatusBadge";
 import Modal from "../components/ui/Modal";
 import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
+import TextArea from "../components/ui/TextArea";
 import { FormField, Input, Select } from "../components/ui/FormUI";
 import { useToast } from "../context/ToastContext";
 
@@ -16,10 +17,14 @@ interface Foster {
   pet: { _id?: string; name: string };
   fosterer: { _id?: string; displayName: string };
   startDate: string;
+  expectedEndDate?: string;
+  extendedDays?: number;
   status: string;
   weeklyReportsSubmitted: number;
   weeklyReportsRequired: number;
 }
+
+const MAX_EXTENSION_DAYS = 30;
 
 interface FosterApplication {
   _id: string;
@@ -27,6 +32,10 @@ interface FosterApplication {
   pet: { _id: string; name: string };
   status: "approved";
   stage: "approved";
+  fosterDays?: number;
+  fosterPeriod?: string;
+  preferredPickupDate?: string;
+  preferredPickupMethod?: "Shelter pickup" | "Home delivery";
 }
 
 export default function Fosters() {
@@ -35,7 +44,8 @@ export default function Fosters() {
   const [creating, setCreating] = useState(false);
   const [applications, setApplications] = useState<FosterApplication[]>([]);
   const [applicationId, setApplicationId] = useState("");
-  const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 10));
+  // Set when the chosen application already has a scheduled pickup; the foster period starts then.
+  const [existingPickup, setExistingPickup] = useState<string | null>(null);
   const [trialDurationDays, setTrialDurationDays] = useState("30");
   const [pickupDate, setPickupDate] = useState("");
   const [pickupMethod, setPickupMethod] = useState("Shelter pickup");
@@ -43,10 +53,25 @@ export default function Fosters() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Finishing or extending an active placement.
+  const [managing, setManaging] = useState<Foster | null>(null);
+  const [outcome, setOutcome] = useState<"ADOPTED" | "RETURNED" | "EXTENDED">("EXTENDED");
+  const [extensionDays, setExtensionDays] = useState("14");
+  const [staffNotes, setStaffNotes] = useState("");
+  const [missingReports, setMissingReports] = useState(0);
+  const [manageError, setManageError] = useState<string | null>(null);
+  const [managingSaving, setManagingSaving] = useState(false);
+
   const columns: Column<Foster>[] = [
     { key: "pet", header: "Pet", accessor: (f) => f.pet?.name },
     { key: "fosterer", header: "Fosterer", accessor: (f) => f.fosterer?.displayName },
     { key: "startDate", header: "Started", accessor: (f) => new Date(f.startDate).toLocaleDateString() },
+    {
+      key: "endsOn",
+      header: "Ends",
+      accessor: (f) =>
+        f.expectedEndDate ? `${new Date(f.expectedEndDate).toLocaleDateString()}${f.extendedDays ? ` (+${f.extendedDays}d)` : ""}` : "—",
+    },
     { key: "reports", header: "Weekly reports", accessor: (f) => `${f.weeklyReportsSubmitted}/${f.weeklyReportsRequired}` },
     { key: "status", header: "Status", accessor: (f) => <StatusBadge status={f.status} /> },
   ];
@@ -57,6 +82,7 @@ export default function Fosters() {
     setPickupDate("");
     setPickupMethod("Shelter pickup");
     setPickupLocation("");
+    setExistingPickup(null);
     try {
       const res = await api.get("/api/applications", {
         params: { status: "approved", stage: "approved", type: "foster", limit: 100 },
@@ -65,6 +91,71 @@ export default function Fosters() {
       setCreating(true);
     } catch (err) {
       showToast(getApiErrorMessage(err, "Failed to load approved foster applications"), "error");
+    }
+  }
+
+  const selectedApplication = applications.find((item) => item._id === applicationId);
+
+  function selectApplication(id: string) {
+    setApplicationId(id);
+    setExistingPickup(null);
+    const application = applications.find((item) => item._id === id);
+    if (!application) return;
+    if (application.fosterDays && application.fosterDays >= 30 && application.fosterDays <= 60) setTrialDurationDays(String(application.fosterDays));
+    // Prefill the pickup with what the applicant asked for (10:00 until staff adjust it).
+    setPickupDate(application.preferredPickupDate ? `${application.preferredPickupDate.slice(0, 10)}T10:00` : "");
+    setPickupMethod(application.preferredPickupMethod ?? "Shelter pickup");
+    // A pickup may already be booked (e.g. from an earlier attempt): reuse it instead of double-booking.
+    api
+      .get("/api/adoption-pickups")
+      .then((res) => {
+        const booked = (res.data.data || []).find(
+          (p: { application: string; status: string; scheduledDate: string }) => String(p.application) === id && p.status === "scheduled"
+        );
+        setExistingPickup(booked?.scheduledDate ?? null);
+      })
+      .catch(() => {});
+  }
+
+  async function openManageModal(foster: Foster) {
+    setManaging(foster);
+    setOutcome("EXTENDED");
+    setExtensionDays("14");
+    setStaffNotes("");
+    setManageError(null);
+    setMissingReports(0);
+    try {
+      const res = await api.get(`/api/foster/${foster._id}/can-finalize`);
+      setMissingReports(res.data.data?.missingReports ?? 0);
+    } catch {
+      /* the warning is optional; ending still works */
+    }
+  }
+
+  async function submitManage(e: FormEvent) {
+    e.preventDefault();
+    if (!managing) return;
+    const days = Number(extensionDays);
+    const remaining = MAX_EXTENSION_DAYS - (managing.extendedDays ?? 0);
+    if (outcome === "EXTENDED" && (!Number.isInteger(days) || days < 7 || days > remaining)) {
+      setManageError(`Extend by 7 to ${remaining} days.`);
+      return;
+    }
+    setManagingSaving(true);
+    setManageError(null);
+    try {
+      await api.put(`/api/foster/${managing._id}/end`, {
+        outcome,
+        ...(outcome === "EXTENDED" ? { extensionDays: days } : {}),
+        ...(staffNotes.trim() ? { staffNotes: staffNotes.trim() } : {}),
+      });
+      showToast(outcome === "EXTENDED" ? `Foster period extended by ${days} days` : "Foster placement completed", "success");
+      setManaging(null);
+      list.reload();
+    } catch (err) {
+      setManageError(getApiErrorMessage(err, "Failed to update foster placement"));
+    } finally {
+      setManagingSaving(false);
     }
   }
 
@@ -80,35 +171,37 @@ export default function Fosters() {
       setError("Foster trial duration must be between 30 and 60 days.");
       return;
     }
-    if (pickupDate && pickupMethod === "Home delivery" && !pickupLocation.trim()) {
+    if (!existingPickup && !pickupDate) {
+      setError("Choose the pickup date: the foster period starts when the pet is handed over.");
+      return;
+    }
+    if (!existingPickup && pickupMethod === "Home delivery" && !pickupLocation.trim()) {
       setError("A delivery address is required for home delivery.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
+      // Book the pickup first: the placement can only start once there is one,
+      // and its start date is the handover date.
+      let handover = existingPickup;
+      if (!handover) {
+        const created = await api.post("/api/adoption-pickups", {
+          application: application._id,
+          scheduledDate: new Date(pickupDate).toISOString(),
+          method: pickupMethod,
+          location: pickupLocation.trim() || undefined,
+        });
+        handover = created.data.data.scheduledDate as string;
+      }
       await api.post("/api/foster", {
         application: application._id,
         pet: application.pet._id,
         fosterer: application.applicant._id,
-        startDate: new Date(`${startDate}T00:00:00`).toISOString(),
+        startDate: new Date(handover).toISOString(),
         trialDurationDays: duration,
       });
-      if (pickupDate) {
-        try {
-          await api.post("/api/adoption-pickups", {
-            application: application._id,
-            scheduledDate: pickupDate,
-            method: pickupMethod,
-            location: pickupLocation.trim() || undefined,
-          });
-          showToast("Foster placement started and pickup scheduled", "success");
-        } catch (err) {
-          showToast(`Placement started, but the pickup was not scheduled: ${getApiErrorMessage(err, "unknown error")}`, "error");
-        }
-      } else {
-        showToast("Foster placement started", "success");
-      }
+      showToast("Foster placement started and pickup scheduled", "success");
       setCreating(false);
       list.reload();
     } catch (err) {
@@ -142,6 +235,13 @@ export default function Fosters() {
         pages={list.pagination.pages}
         total={list.pagination.total}
         onPageChange={list.setPage}
+        rowActions={(f) =>
+          f.status === "active" ? (
+            <Button variant="secondary" onClick={() => openManageModal(f)}>
+              Complete / extend
+            </Button>
+          ) : null
+        }
       />
 
       <Modal
@@ -156,7 +256,7 @@ export default function Fosters() {
         <form id="create-foster-placement" onSubmit={createPlacement}>
           {error && <div className="mb-4"><Alert tone="danger">{error}</Alert></div>}
           <FormField label="Approved foster application" htmlFor="foster-application">
-            <Select id="foster-application" required value={applicationId} onChange={(e) => setApplicationId(e.target.value)}>
+            <Select id="foster-application" required value={applicationId} onChange={(e) => selectApplication(e.target.value)}>
               <option value="">Select an application</option>
               {applications.map((application) => (
                 <option key={application._id} value={application._id}>
@@ -165,17 +265,33 @@ export default function Fosters() {
               ))}
             </Select>
           </FormField>
-          <FormField label="Start date" htmlFor="foster-start-date">
-            <Input id="foster-start-date" type="date" required value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </FormField>
           <FormField label="Trial duration (days)" htmlFor="foster-duration">
             <Input id="foster-duration" type="number" min={30} max={60} required value={trialDurationDays} onChange={(e) => setTrialDurationDays(e.target.value)} />
           </FormField>
-          <p className="mb-2 mt-4 text-sm font-semibold text-gray-700">Pet pickup (optional)</p>
-          <FormField label="Pickup date & time" htmlFor="foster-pickup-date">
-            <Input id="foster-pickup-date" type="datetime-local" value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} />
-          </FormField>
-          {pickupDate && (
+          {selectedApplication && (
+            <p className="-mt-2 mb-3 text-xs text-gray-500">
+              {selectedApplication.fosterDays
+                ? `Applicant offered ${selectedApplication.fosterDays} days.`
+                : selectedApplication.fosterPeriod
+                  ? `Applicant wrote: "${selectedApplication.fosterPeriod}". Choose 30–60 days.`
+                  : "Applicant did not state a period."}
+            </p>
+          )}
+          <p className="mb-2 mt-4 text-sm font-semibold text-gray-700">Pet pickup</p>
+          {selectedApplication?.preferredPickupDate && !existingPickup && (
+            <p className="mb-2 text-xs text-gray-500">
+              Applicant requested {new Date(selectedApplication.preferredPickupDate).toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" })}
+              {selectedApplication.preferredPickupMethod ? ` · ${selectedApplication.preferredPickupMethod}` : ""}.
+            </p>
+          )}
+          {existingPickup ? (
+            <Alert tone="info">A pickup is already scheduled for {new Date(existingPickup).toLocaleString()}. The foster period starts then.</Alert>
+          ) : (
+            <FormField label="Pickup date & time (the foster period starts then)" htmlFor="foster-pickup-date">
+              <Input id="foster-pickup-date" type="datetime-local" required value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} />
+            </FormField>
+          )}
+          {!existingPickup && pickupDate && (
             <>
               <FormField label="Method" htmlFor="foster-pickup-method">
                 <Select id="foster-pickup-method" value={pickupMethod} onChange={(e) => setPickupMethod(e.target.value)}>
@@ -188,6 +304,50 @@ export default function Fosters() {
               </FormField>
             </>
           )}
+        </form>
+      </Modal>
+      <Modal
+        isOpen={!!managing}
+        onClose={() => setManaging(null)}
+        title={`Foster placement · ${managing?.pet?.name ?? ""}`}
+        footer={<>
+          <Button variant="secondary" onClick={() => setManaging(null)} disabled={managingSaving}>Cancel</Button>
+          <Button type="submit" form="manage-foster-placement" loading={managingSaving}>
+            {outcome === "EXTENDED" ? "Extend foster period" : "Complete placement"}
+          </Button>
+        </>}
+      >
+        <form id="manage-foster-placement" onSubmit={submitManage}>
+          {manageError && <div className="mb-4"><Alert tone="danger">{manageError}</Alert></div>}
+          {outcome !== "EXTENDED" && missingReports > 0 && (
+            <div className="mb-4"><Alert tone="warning">{missingReports} weekly {missingReports === 1 ? "report is" : "reports are"} still missing for this placement.</Alert></div>
+          )}
+          <FormField label="What is happening?" htmlFor="foster-outcome">
+            <Select id="foster-outcome" value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
+              <option value="EXTENDED">Extend the foster period</option>
+              <option value="ADOPTED">Fosterer is adopting the pet</option>
+              <option value="RETURNED">Pet is returned to the shelter</option>
+            </Select>
+          </FormField>
+          {outcome === "EXTENDED" && (
+            <FormField label="Extend by (days)" htmlFor="foster-extension">
+              <Input
+                id="foster-extension"
+                type="number"
+                min={7}
+                max={MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)}
+                required
+                value={extensionDays}
+                onChange={(e) => setExtensionDays(e.target.value)}
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Up to {MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)} more days can be added. The pet stays with the fosterer and weekly reports continue.
+              </p>
+            </FormField>
+          )}
+          <FormField label="Notes (optional)" htmlFor="foster-notes">
+            <TextArea id="foster-notes" rows={3} value={staffNotes} onChange={(e) => setStaffNotes(e.target.value)} />
+          </FormField>
         </form>
       </Modal>
     </div>

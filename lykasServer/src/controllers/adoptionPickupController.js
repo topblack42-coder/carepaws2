@@ -1,5 +1,6 @@
 const AdoptionPickup = require("../models/AdoptionPickup");
 const Application = require("../models/Application");
+const { Foster } = require("../models/Foster");
 const { advanceApplicationStage } = require("./applicationController");
 const { notifyOnce } = require("../utils/notificationHelper");
 
@@ -8,6 +9,20 @@ const DEFAULT_LOCATION = "the shelter";
 
 function fail(statusCode, message) {
   return Object.assign(new Error(message), { statusCode });
+}
+
+// A foster period starts at handover: when its pickup is booked or moved, move the
+// foster's start and expected end with it (keeping any extension days).
+async function syncFosterToPickup(pickup) {
+  if (pickup.status !== "scheduled") return;
+  const foster = await Foster.findOne({ application: pickup.application, status: "active" });
+  if (!foster || !foster.trialDurationDays) return;
+  const start = new Date(pickup.scheduledDate);
+  const end = new Date(start);
+  end.setDate(end.getDate() + foster.trialDurationDays);
+  foster.startDate = start;
+  foster.expectedEndDate = end;
+  await foster.save();
 }
 
 function describePickup(pickup) {
@@ -70,6 +85,8 @@ async function create(req, res, next) {
       handledBy: req.user._id,
     });
 
+    await syncFosterToPickup(pickup);
+
     // First pickup moves the pipeline forward; a rescheduled one after a cancellation stays put.
     if (!isFoster && application.stage === "approved") {
       await advanceApplicationStage(application, "adoption_scheduled", req.user._id, `Pickup scheduled for ${new Date(pickup.scheduledDate).toLocaleString()}`);
@@ -105,6 +122,7 @@ async function update(req, res, next) {
 
     pickup.set(next_);
     await pickup.save();
+    await syncFosterToPickup(pickup);
 
     await notifyOnce({
       recipient: pickup.applicant,

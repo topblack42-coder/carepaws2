@@ -9,6 +9,8 @@ const fosterSchema = new mongoose.Schema(
     endDate: { type: Date, default: null },
     expectedEndDate: { type: Date },
     trialDurationDays: { type: Number },
+    // Days added by staff after the original 30-60 day trial (total capped, see fosterController).
+    extendedDays: { type: Number, default: 0 },
     weeklyReportsRequired: { type: Number, default: 0 },
     weeklyReportsSubmitted: { type: Number, default: 0 },
     outcome: { type: String, enum: ["ADOPTED", "RETURNED", "EXTENDED", null], default: null },

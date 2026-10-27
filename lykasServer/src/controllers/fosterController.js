@@ -1,7 +1,12 @@
 const { Foster, WeeklyFosterReport, getFosterReportDueDate } = require("../models/Foster");
 const Pet = require("../models/Pet");
 const Application = require("../models/Application");
+const AdoptionPickup = require("../models/AdoptionPickup");
+const { dayOf } = require("../utils/visitTracker");
 const { notifyOnce } = require("../utils/notificationHelper");
+
+// The original trial is 30-60 days; staff may add at most this many days on top, in total.
+const MAX_EXTENSION_DAYS = 30;
 
 // GET /api/foster/reports/pending-review — staff
 async function pendingReports(req, res, next) {
@@ -82,6 +87,16 @@ async function create(req, res, next) {
     const startDate = new Date(req.body.startDate);
     if (Number.isNaN(startDate.getTime())) {
       return res.status(400).json({ success: false, message: "Invalid foster start date" });
+    }
+
+    // The foster period begins when the pet is handed over, so a pickup must be
+    // booked first and the period can't start before it.
+    const pickup = await AdoptionPickup.findOne({ application: application._id, status: { $in: ["scheduled", "completed"] } }).sort({ scheduledDate: -1 });
+    if (!pickup) {
+      return res.status(409).json({ success: false, message: "Schedule the pet pickup before starting the foster placement" });
+    }
+    if (dayOf(startDate) < dayOf(pickup.scheduledDate)) {
+      return res.status(409).json({ success: false, message: "The foster period can't start before the pet is picked up" });
     }
 
     let trialDurationDays = req.body.trialDurationDays;
@@ -174,7 +189,8 @@ async function update(req, res, next) {
     if (foster.status === "completed" && (!foster.application || !foster.startDate || !foster.endDate || !foster.trialDurationDays)) {
       return res.status(409).json({ success: false, message: "A completed foster must have a valid placement and trial period" });
     }
-    if (foster.trialDurationDays !== undefined && (foster.trialDurationDays < 30 || foster.trialDurationDays > 60)) {
+    const baseTrialDays = foster.trialDurationDays === undefined ? undefined : foster.trialDurationDays - (foster.extendedDays || 0);
+    if (baseTrialDays !== undefined && (baseTrialDays < 30 || baseTrialDays > 60)) {
       return res.status(409).json({ success: false, message: "Foster trial duration must be between 30 and 60 days" });
     }
 
@@ -195,6 +211,43 @@ async function end(req, res, next) {
     }
     if (!foster.application || !foster.startDate || !foster.expectedEndDate || !foster.trialDurationDays) {
       return res.status(409).json({ success: false, message: "Foster placement has no valid trial period" });
+    }
+
+    // EXTENDED keeps the placement running: push the end date back and add the
+    // extra weekly reports. It must not close the foster or free up the pet.
+    if (req.body.outcome === "EXTENDED") {
+      const extensionDays = req.body.extensionDays;
+      if (!Number.isInteger(extensionDays)) {
+        return res.status(400).json({ success: false, message: "Choose how many days to extend the foster period" });
+      }
+      const alreadyExtended = foster.extendedDays || 0;
+      if (alreadyExtended + extensionDays > MAX_EXTENSION_DAYS) {
+        return res.status(409).json({
+          success: false,
+          message: `A foster placement can be extended by at most ${MAX_EXTENSION_DAYS} days in total (${alreadyExtended} already used)`,
+        });
+      }
+
+      const newEnd = new Date(foster.expectedEndDate);
+      newEnd.setDate(newEnd.getDate() + extensionDays);
+      foster.expectedEndDate = newEnd;
+      foster.extendedDays = alreadyExtended + extensionDays;
+      foster.trialDurationDays += extensionDays;
+      foster.weeklyReportsRequired = Math.ceil(foster.trialDurationDays / 7);
+      if (req.body.staffNotes) foster.staffNotes = req.body.staffNotes;
+      await foster.save();
+
+      await notifyOnce({
+        recipient: foster.fosterer,
+        type: "GENERAL",
+        title: "Your foster period was extended",
+        message: `Your foster period now runs until ${newEnd.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}. Weekly reports continue until then.`,
+        refModel: "Foster",
+        refId: foster._id,
+        dedupeKey: `foster-extended:${foster._id}:${foster.extendedDays}`,
+      });
+
+      return res.json({ success: true, data: foster });
     }
 
     foster.status = "completed";
@@ -266,8 +319,8 @@ async function canFinalize(req, res, next) {
     const hasTrialPeriod = Boolean(
       foster.startDate &&
         foster.expectedEndDate &&
-        foster.trialDurationDays >= 30 &&
-        foster.trialDurationDays <= 60
+        foster.trialDurationDays - (foster.extendedDays || 0) >= 30 &&
+        foster.trialDurationDays - (foster.extendedDays || 0) <= 60
     );
     const missingReports = Math.max(0, foster.weeklyReportsRequired - submitted);
     return res.json({

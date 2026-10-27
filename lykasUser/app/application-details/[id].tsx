@@ -32,6 +32,8 @@ interface ApplicationDetail {
   _id: string;
   pet: { name: string; imageUrl?: string };
   type?: "adoption" | "foster";
+  preferredPickupDate?: string;
+  preferredPickupMethod?: string;
   status: string;
   stage: string;
   stageHistory: StageHistoryEntry[];
@@ -184,6 +186,7 @@ export default function ApplicationDetailsScreen() {
                   {pickup.method === "Home delivery" ? `Delivery to ${pickup.location}` : `Pick up at ${pickup.location || "the shelter"}`}
                 </Text>
                 <Text className="mt-2 font-sans text-xs text-muted">Please bring a valid ID. Contact the shelter from Help if you need to change the time.</Text>
+                {application.type === "foster" && <Text className="mt-1 font-sans text-xs text-muted">Your foster period starts on this day.</Text>}
               </>
             ) : pickup?.status === "completed" ? (
               <Text className="font-sans text-sm text-mintDeep">
@@ -194,7 +197,16 @@ export default function ApplicationDetailsScreen() {
                 {pickup.status === "no-show" ? "The last pickup was missed." : pickup.cancelReason || "The last pickup was cancelled."} The shelter will contact you to arrange a new time.
               </Text>
             ) : (
-              <Text className="font-sans text-sm text-muted">You&apos;re approved! The shelter will schedule your pet&apos;s pickup and notify you here.</Text>
+              <>
+                <Text className="font-sans text-sm text-muted">You&apos;re approved! The shelter will schedule your pet&apos;s pickup and notify you here.</Text>
+                {application.preferredPickupDate && (
+                  <Text className="mt-2 font-sans text-sm text-slate">
+                    You asked for{" "}
+                    {new Date(application.preferredPickupDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                    {application.preferredPickupMethod === "Home delivery" ? " (home delivery)" : " (shelter pickup)"}. The shelter will confirm the exact time.
+                  </Text>
+                )}
+              </>
             )}
           </View>
         )}

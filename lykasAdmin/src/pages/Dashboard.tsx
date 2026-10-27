@@ -10,6 +10,7 @@ interface DashboardData {
   pendingApplications: number;
   pendingVolunteers: number;
   revenueThisMonthCentavos: number;
+  visitors?: { today: number; last7Days: number; last30Days: number; totalMembers: number; daily: { day: string; count: number }[] };
   shelterStats: { count: number; totalCapacity: number; totalOccupancy: number; availableCapacity: number; occupancyPercentage: number };
 }
 
@@ -53,6 +54,10 @@ export default function Dashboard() {
   const availableCount = data.petsByStatus.find((s) => s._id === "Available")?.count ?? 0;
   const revenue = (data.revenueThisMonthCentavos / 100).toLocaleString(undefined, { style: "currency", currency: "PHP" });
 
+  const visitors = data.visitors;
+  const peak = visitors ? Math.max(1, ...visitors.daily.map((d) => d.count)) : 1;
+  const weekday = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+
   return (
     <div>
       <PageHeader title="Dashboard" description="A snapshot of what's happening at the shelter right now." />
@@ -65,6 +70,35 @@ export default function Dashboard() {
         <StatCard label="Shelter occupancy" value={`${data.shelterStats.totalOccupancy}/${data.shelterStats.totalCapacity}`} hint={`${data.shelterStats.occupancyPercentage}% · ${data.shelterStats.availableCapacity} spaces available`} />
         */}
       </div>
+
+      {visitors && (
+        <div className="mb-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard label="Visitors today" value={visitors.today} hint="Members who used the app today" />
+            <StatCard label="Visitors · last 7 days" value={visitors.last7Days} hint="Unique members" />
+            <StatCard
+              label="Visitors · last 30 days"
+              value={visitors.last30Days}
+              hint={`${visitors.totalMembers} registered ${visitors.totalMembers === 1 ? "member" : "members"}`}
+            />
+          </div>
+          <Card className="mt-4">
+            <h2 className="mb-3 text-sm font-semibold text-gray-700">Daily visitors · last 7 days</h2>
+            <div className="flex h-28 items-end gap-3" role="img" aria-label="Bar chart of daily visitors for the last 7 days">
+              {visitors.daily.map((d, i) => (
+                <div key={d.day} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                  <span className="text-xs font-medium text-gray-700">{d.count}</span>
+                  <div
+                    className={`w-full rounded-t-md ${i === visitors.daily.length - 1 ? "bg-primary" : "bg-primary/40"}`}
+                    style={{ height: `${Math.max(4, (d.count / peak) * 72)}px` }}
+                  />
+                  <span className="text-xs text-gray-400">{weekday(d.day)}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
 
       <Card>
         <h2 className="mb-3 text-sm font-semibold text-gray-700">Pets by status</h2>

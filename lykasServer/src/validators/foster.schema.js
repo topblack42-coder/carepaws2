@@ -18,6 +18,8 @@ const fosterCreateSchema = z
 const fosterEndSchema = z
   .object({
     outcome: z.enum(["ADOPTED", "RETURNED", "EXTENDED"]),
+    // Required when outcome is EXTENDED.
+    extensionDays: z.number().int().min(7).max(30).optional(),
     returnNotes: z.string().optional(),
     staffNotes: z.string().optional(),
   })
