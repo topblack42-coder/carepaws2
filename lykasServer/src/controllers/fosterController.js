@@ -8,6 +8,14 @@ const { notifyOnce } = require("../utils/notificationHelper");
 // The original trial is 30-60 days; staff may add at most this many days on top, in total.
 const MAX_EXTENSION_DAYS = 30;
 
+const STAFF_ROLES = ["staff", "admin", "super_admin"];
+
+// A foster placement (and its reports) is visible to staff and to the fosterer only.
+function canAccessFoster(foster, user) {
+  if (STAFF_ROLES.includes(user.role)) return true;
+  return String(foster.fosterer?._id ?? foster.fosterer) === String(user._id);
+}
+
 // GET /api/foster/reports/pending-review — staff
 async function pendingReports(req, res, next) {
   try {
@@ -29,7 +37,7 @@ async function reviewReport(req, res, next) {
 
     report.reviewedBy = req.user._id;
     report.reviewedAt = new Date();
-    report.adminNotes = req.body.adminNotes;
+    report.adminNotes = typeof req.body.adminNotes === "string" ? req.body.adminNotes.trim().slice(0, 2000) : undefined;
     await report.save();
 
     await notifyOnce({
@@ -169,6 +177,7 @@ async function getOne(req, res, next) {
   try {
     const foster = await Foster.findById(req.params.id).populate("pet fosterer application");
     if (!foster) return res.status(404).json({ success: false, message: "Foster not found" });
+    if (!canAccessFoster(foster, req.user)) return res.status(403).json({ success: false, message: "Not authorized to view this foster placement" });
     return res.json({ success: true, data: foster });
   } catch (err) {
     next(err);
@@ -337,6 +346,7 @@ async function addReport(req, res, next) {
   try {
     const foster = await Foster.findById(req.params.fosterId);
     if (!foster) return res.status(404).json({ success: false, message: "Foster not found" });
+    if (!canAccessFoster(foster, req.user)) return res.status(403).json({ success: false, message: "Not authorized to report on this foster placement" });
     if (foster.status !== "active") {
       return res.status(409).json({ success: false, message: "Weekly reports can only be submitted for an active foster placement" });
     }
@@ -405,6 +415,9 @@ async function addReport(req, res, next) {
 // GET /api/foster/:fosterId/reports
 async function listReports(req, res, next) {
   try {
+    const foster = await Foster.findById(req.params.fosterId).select("fosterer");
+    if (!foster) return res.status(404).json({ success: false, message: "Foster not found" });
+    if (!canAccessFoster(foster, req.user)) return res.status(403).json({ success: false, message: "Not authorized to view these reports" });
     const reports = await WeeklyFosterReport.find({ foster: req.params.fosterId }).sort({ weekNumber: 1 });
     return res.json({ success: true, data: reports });
   } catch (err) {

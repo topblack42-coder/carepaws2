@@ -365,4 +365,28 @@ describe("Foster placement pipeline", () => {
     expect(tooMuch.status).toBe(409);
   });
 
+  it("keeps a placement's reports private to the fosterer and staff", async () => {
+    const application = await createApprovedFosterApplication(applicantToken, staffToken, pet);
+    await schedulePickup(staffToken, application._id);
+    const placement = await request(app)
+      .post("/api/foster")
+      .set("Authorization", `Bearer ${staffToken}`)
+      .send({ application: application._id, pet: pet._id.toString(), fosterer: applicantUserId, startDate: "2026-08-23T09:00:00.000Z", trialDurationDays: 30 });
+    expect(placement.status).toBe(201);
+    const id = placement.body.data._id;
+
+    const stranger = await registerAndLogin("foster-stranger@example.com");
+    const read = await request(app).get(`/api/foster/${id}/reports`).set("Authorization", `Bearer ${stranger.token}`);
+    expect(read.status).toBe(403);
+    const write = await request(app).post(`/api/foster/${id}/reports`).set("Authorization", `Bearer ${stranger.token}`).send({ weekNumber: 1 });
+    expect(write.status).toBe(403);
+    const detail = await request(app).get(`/api/foster/${id}`).set("Authorization", `Bearer ${stranger.token}`);
+    expect(detail.status).toBe(403);
+
+    const own = await request(app).get(`/api/foster/${id}/reports`).set("Authorization", `Bearer ${applicantToken}`);
+    expect(own.status).toBe(200);
+    const staff = await request(app).get(`/api/foster/${id}/reports`).set("Authorization", `Bearer ${staffToken}`);
+    expect(staff.status).toBe(200);
+  });
+
 });

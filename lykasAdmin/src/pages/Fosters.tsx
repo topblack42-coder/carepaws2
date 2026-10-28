@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 import { useResourceList } from "../hooks/useResourceList";
 import { api, getApiErrorMessage } from "../services/api";
@@ -11,6 +11,9 @@ import Alert from "../components/ui/Alert";
 import TextArea from "../components/ui/TextArea";
 import { FormField, Input, Select } from "../components/ui/FormUI";
 import { useToast } from "../context/ToastContext";
+import { useRealtime } from "../context/RealtimeContext";
+import FosterReportsModal from "../components/fosters/FosterReportsModal";
+import { attentionReasons } from "../utils/fosterReports";
 
 interface Foster {
   _id: string;
@@ -53,6 +56,32 @@ export default function Fosters() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Which placements have reports waiting for staff, and whether any of them look worrying.
+  const [pending, setPending] = useState<Map<string, { count: number; attention: boolean }>>(new Map());
+  const [reportsFor, setReportsFor] = useState<Foster | null>(null);
+
+  const loadPending = useCallback(() => {
+    api
+      .get("/api/foster/reports/pending-review")
+      .then((res) => {
+        const next = new Map<string, { count: number; attention: boolean }>();
+        for (const report of res.data.data ?? []) {
+          const id = String(report.foster?._id ?? report.foster);
+          const entry = next.get(id) ?? { count: 0, attention: false };
+          entry.count += 1;
+          if (attentionReasons(report).length > 0) entry.attention = true;
+          next.set(id, entry);
+        }
+        setPending(next);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    loadPending();
+  }, [loadPending]);
+  useRealtime(["WeeklyFosterReport"], loadPending);
+
   // Finishing or extending an active placement.
   const [managing, setManaging] = useState<Foster | null>(null);
   const [outcome, setOutcome] = useState<"ADOPTED" | "RETURNED" | "EXTENDED">("EXTENDED");
@@ -73,6 +102,19 @@ export default function Fosters() {
         f.expectedEndDate ? `${new Date(f.expectedEndDate).toLocaleDateString()}${f.extendedDays ? ` (+${f.extendedDays}d)` : ""}` : "—",
     },
     { key: "reports", header: "Weekly reports", accessor: (f) => `${f.weeklyReportsSubmitted}/${f.weeklyReportsRequired}` },
+    {
+      key: "toReview",
+      header: "To review",
+      accessor: (f) => {
+        const entry = pending.get(f._id);
+        if (!entry) return "—";
+        return entry.attention ? (
+          <StatusBadge status={`${entry.count} · needs attention`} tone="danger" />
+        ) : (
+          <StatusBadge status={`${entry.count} to review`} tone="warning" />
+        );
+      },
+    },
     { key: "status", header: "Status", accessor: (f) => <StatusBadge status={f.status} /> },
   ];
 
@@ -235,14 +277,21 @@ export default function Fosters() {
         pages={list.pagination.pages}
         total={list.pagination.total}
         onPageChange={list.setPage}
-        rowActions={(f) =>
-          f.status === "active" ? (
-            <Button variant="secondary" onClick={() => openManageModal(f)}>
-              Complete / extend
+        rowActions={(f) => (
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setReportsFor(f)}>
+              View reports
             </Button>
-          ) : null
-        }
+            {f.status === "active" && (
+              <Button variant="secondary" onClick={() => openManageModal(f)}>
+                Complete / extend
+              </Button>
+            )}
+          </div>
+        )}
       />
+
+      <FosterReportsModal foster={reportsFor} onClose={() => setReportsFor(null)} onChanged={loadPending} />
 
       <Modal
         isOpen={creating}

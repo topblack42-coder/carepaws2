@@ -6,7 +6,10 @@ interface AuditLogEntry {
   _id: string;
   actor: { displayName: string };
   action: string;
+  actionLabel?: string;
+  description?: string;
   entityType?: string;
+  entityLabel?: string;
   createdAt: string;
 }
 
@@ -15,8 +18,14 @@ export default function AuditLogs() {
 
   const columns: Column<AuditLogEntry>[] = [
     { key: "actor", header: "Actor", accessor: (a) => a.actor?.displayName },
-    { key: "action", header: "Action", accessor: (a) => <code className="text-xs">{a.action}</code> },
-    { key: "entityType", header: "Entity", accessor: (a) => a.entityType || "—" },
+    { key: "action", header: "Action", accessor: (a) => (
+        <div>
+          <div className="font-medium">{a.actionLabel || a.action}</div>
+          {a.description && <div className="text-xs text-gray-500">{a.description}</div>}
+        </div>
+      ),
+    },
+    { key: "entityType", header: "Entity", accessor: (a) => a.entityLabel || a.entityType || "—" },
     { key: "createdAt", header: "When", accessor: (a) => new Date(a.createdAt).toLocaleString() },
   ];
 

@@ -3,6 +3,7 @@ const router = express.Router();
 const AuditLog = require("../models/AuditLog");
 const { protect, requireRole } = require("../middleware/authMiddleware");
 const { buildSort, buildPagination } = require("../utils/queryBuilder");
+const { actionLabel, actionsMatching, describeEntries, ENTITY_LABELS } = require("../utils/auditDescriptions");
 
 router.get("/actions", protect, requireRole("super_admin"), async (req, res, next) => {
   try {
@@ -18,10 +19,26 @@ router.get("/", protect, requireRole("super_admin"), async (req, res, next) => {
     const filter = {};
     if (req.query.entityType) filter.entityType = req.query.entityType;
     if (req.query.actor) filter.actor = req.query.actor;
+    if (req.query.q) {
+      // Search matches both the friendly label ("archive") and the raw code ("user.delete").
+      const codes = actionsMatching(req.query.q);
+      const escaped = String(req.query.q).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [{ action: { $in: codes } }, { action: new RegExp(escaped, "i") }];
+    }
     const sort = buildSort(req.query);
     const total = await AuditLog.countDocuments(filter);
     const { page, limit, skip, ...paginationRest } = buildPagination(total, req.query.page, req.query.limit);
-    const data = await AuditLog.find(filter).populate("actor", "displayName email").sort(sort).skip(skip).limit(limit);
+    const logs = await AuditLog.find(filter).populate("actor", "displayName email").sort(sort).skip(skip).limit(limit).lean();
+    const details = await describeEntries(logs);
+    const data = logs.map((l) => {
+      const d = details.get(String(l._id)) || {};
+      return {
+        ...l,
+        actionLabel: actionLabel(l.action),
+        description: d.description || actionLabel(l.action),
+        entityLabel: ENTITY_LABELS[l.entityType] || l.entityType || null,
+      };
+    });
     res.json({ success: true, data, pagination: { page, limit, ...paginationRest } });
   } catch (err) {
     next(err);
