@@ -30,7 +30,7 @@ const petSchema = new mongoose.Schema(
     weight: { type: Number },
     temperament: {
       type: String,
-      enum: ["Calm", "Playful", "Shy", "Energetic", "Affectionate", "Independent"],
+      enum: ["Calm", "Playful", "Shy", "Energetic", "Affectionate", "Independent", null],
     },
     energyLevel: { type: String, enum: ["Low", "Medium", "High"] },
     healthStatus: { type: String, default: "" },

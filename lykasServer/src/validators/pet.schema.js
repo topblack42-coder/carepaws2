@@ -9,7 +9,13 @@ const petCreateSchema = z
     gender: z.enum(["Male", "Female"]).optional(),
     size: z.enum(["Small", "Medium", "Large"]).optional(),
     weight: z.coerce.number().min(0).optional(),
-    temperament: z.enum(["Calm", "Playful", "Shy", "Energetic", "Affectionate", "Independent"]).optional(),
+    // Optional: a blank value clears the temperament (stored as null).
+    temperament: z
+      .preprocess(
+        (value) => (value === "" ? null : value),
+        z.enum(["Calm", "Playful", "Shy", "Energetic", "Affectionate", "Independent"]).nullable()
+      )
+      .optional(),
     energyLevel: z.enum(["Low", "Medium", "High"]).optional(),
     healthStatus: z.string().max(500).optional(),
     description: z.string().max(2000).optional(),

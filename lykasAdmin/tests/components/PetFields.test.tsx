@@ -41,7 +41,8 @@ describe("Edit pet — full profile", () => {
   it("sends edited profile fields and lets text fields be cleared", async () => {
     render(<EditPetModal pet={PET} shelters={shelters} onClose={() => {}} onSubmit={onSubmit} mutating={false} mutationError={null} />);
     await userEvent.selectOptions(screen.getByLabelText("Shelter (optional)"), "s2");
-    await userEvent.clear(screen.getByLabelText("Temperament (optional)"));
+    // "Friendly" is a legacy free-text value, so the dropdown starts on "Not specified" and it saves blank.
+    expect(screen.getByLabelText("Temperament (optional)")).toHaveValue("");
     await userEvent.click(screen.getByRole("button", { name: /save changes/i }));
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));

@@ -37,6 +37,8 @@ export const emptyPetForm: PetFormValues = {
 };
 
 /** shelterId can arrive as a plain id or a populated { _id } object. */
+const TEMPERAMENTS = ["Calm", "Playful", "Shy", "Energetic", "Affectionate", "Independent"];
+
 function shelterIdOf(pet: Pet): string {
   const s = pet.shelterId as unknown;
   if (!s) return "";
@@ -52,7 +54,8 @@ export function petToForm(pet: Pet): PetFormValues {
     age: pet.age != null ? String(pet.age) : "",
     gender: pet.gender ?? "",
     size: pet.size ?? "",
-    temperament: pet.temperament ?? "",
+    // Older records may hold free text (e.g. "Friendly"); treat anything outside the allowed list as not specified.
+    temperament: TEMPERAMENTS.includes(pet.temperament as never) ? (pet.temperament as string) : "",
     energyLevel: pet.energyLevel ?? "",
     shelterId: shelterIdOf(pet),
     description: pet.description ?? "",
@@ -167,12 +170,14 @@ export function PetFields({ idPrefix, values, onChange }: PetFieldsProps) {
       </div>
 
       <FormField label="Temperament (optional)" htmlFor={id("temperament")}>
-        <Input
-          id={id("temperament")}
-          placeholder="e.g. Friendly, calm, good with kids"
-          value={values.temperament}
-          onChange={(e) => onChange({ temperament: e.target.value })}
-        />
+        <Select id={id("temperament")} value={values.temperament} onChange={(e) => onChange({ temperament: e.target.value })}>
+          <option value="">Not specified</option>
+          {TEMPERAMENTS.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </Select>
       </FormField>
 
       <FormField label="Description (optional)" htmlFor={id("description")}>
