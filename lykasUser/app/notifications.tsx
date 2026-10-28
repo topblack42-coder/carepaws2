@@ -6,7 +6,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../utils/api";
 import { formatRelativeTime } from "../utils/format";
-import { getNotificationMeta, getNotificationRoute, type NotificationItem } from "../utils/notifications";
+import { getNotificationMeta, type NotificationItem } from "../utils/notifications";
 import StateView from "../components/StateView";
 import colors from "../utils/colors";
 
@@ -70,8 +70,18 @@ export default function NotificationsScreen() {
 
   function openNotification(n: NotificationItem) {
     if (!n.isRead) void markRead(n._id);
-    const target = getNotificationRoute(n);
-    if (target) router.push(target);
+    // Open the detail page, which shows the full message and links on to the related screen.
+    router.push({
+      pathname: "/notification-details",
+      params: {
+        title: n.title,
+        message: n.message,
+        type: n.type ?? "",
+        refModel: n.refModel ?? "",
+        refId: n.refId ?? "",
+        createdAt: n.createdAt,
+      },
+    });
   }
 
   async function markAllRead() {
@@ -184,10 +194,10 @@ export default function NotificationsScreen() {
                 </View>
                 <View className="flex-1">
                   <View className="flex-row items-start justify-between gap-2">
-                    <Text className={`flex-1 text-sm text-ink ${item.isRead ? "font-sans" : "font-sans-bold"}`}>{item.title}</Text>
+                    <Text numberOfLines={1} ellipsizeMode="tail" className={`flex-1 text-sm text-ink ${item.isRead ? "font-sans" : "font-sans-bold"}`}>{item.title}</Text>
                     {!item.isRead && <View className="mt-1.5 h-2 w-2 rounded-full bg-accentOrange" />}
                   </View>
-                  <Text className="mt-0.5 font-sans text-xs leading-4 text-muted">{item.message}</Text>
+                  <Text numberOfLines={1} ellipsizeMode="tail" className="mt-0.5 font-sans text-xs leading-4 text-muted">{item.message}</Text>
                   <Text className="mt-1 font-sans text-[11px] text-mutedLight">{formatRelativeTime(item.createdAt)}</Text>
                 </View>
               </Pressable>
