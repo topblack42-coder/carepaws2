@@ -54,7 +54,14 @@ async function getOne(req, res, next) {
   try {
     const visit = await HomeVisit.findById(req.params.id).populate("applicant pet assignedTo application");
     if (!visit) return res.status(404).json({ success: false, message: "Home visit not found" });
-    return res.json({ success: true, data: visit });
+    const isStaff = ["staff", "admin", "super_admin"].includes(req.user.role);
+    const ownerId = visit.applicant?._id || visit.applicant;
+    if (!isStaff && String(ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: "Not authorized to view this home visit" });
+    }
+    const result = visit.toObject();
+    if (!isStaff && result.application) delete result.application.internalNotes; // staff-only
+    return res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

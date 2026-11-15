@@ -21,12 +21,16 @@ jest.mock("../utils/api", () => {
 
 import { api } from "../utils/api";
 
+let mockUser: { phone?: string | null; address?: string | null } | null = null;
+jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: mockUser }) }));
+
 describe("Adoption application form", () => {
   beforeEach(() => {
     jest.mocked(api.post).mockReset();
     mockReplace.mockReset();
     mockBack.mockReset();
     mockParams = { id: "pet1" };
+    mockUser = { phone: null, address: null };
     jest.spyOn(Alert, "alert").mockImplementation(() => {});
   });
 
@@ -215,5 +219,23 @@ describe("Adoption application form", () => {
         )
       );
     });
+  });
+
+  it("recommends completing the profile when phone and address are missing", () => {
+    render(<ApplyToPetScreen />);
+    expect(screen.getByTestId("apply-complete-profile")).toBeTruthy();
+    expect(screen.getByText(/no phone number and home address/)).toBeTruthy();
+  });
+
+  it("prefills phone and address from the profile and hides the recommendation", async () => {
+    mockUser = { phone: "0917111222", address: "9 Rizal Ave" };
+    jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    render(<ApplyToPetScreen />);
+
+    expect(screen.queryByTestId("apply-complete-profile")).toBeNull();
+    fireEvent.press(screen.getByTestId("apply-submit"));
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/api/applications", expect.objectContaining({ phone: "0917111222", address: "9 Rizal Ave" }))
+    );
   });
 });

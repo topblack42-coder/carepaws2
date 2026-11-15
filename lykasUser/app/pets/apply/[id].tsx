@@ -5,6 +5,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { api, getApiErrorMessage } from "../../../utils/api";
 import { isEmailNotVerifiedError } from "../../../utils/emailVerification";
+import { useAuth } from "../../../context/AuthContext";
+import { formatMissingFields, getMissingProfileFields } from "../../../utils/profileCompleteness";
 import FormInput from "../../../components/FormInput";
 import PrimaryButton from "../../../components/PrimaryButton";
 import colors from "../../../utils/colors";
@@ -41,8 +43,11 @@ export default function ApplyToPetScreen() {
   // Never trust the raw param: anything other than "foster" is an adoption.
   const type = typeParam === "foster" ? "foster" : "adoption";
   const isFoster = type === "foster";
-  const [phone, setPhone] = useState("");
-  const [address, setAddress] = useState("");
+  const { user } = useAuth();
+  // Start from what the user saved in Settings so they don't retype it.
+  const [phone, setPhone] = useState(user?.phone ?? "");
+  const [address, setAddress] = useState(user?.address ?? "");
+  const missingProfileFields = getMissingProfileFields(user);
   const [experience, setExperience] = useState("");
   const [householdSize, setHouseholdSize] = useState("");
   const [isRenting, setIsRenting] = useState(false);
@@ -98,6 +103,24 @@ export default function ApplyToPetScreen() {
           </Pressable>
           <Text className="font-display text-xl text-ink">{isFoster ? "Foster application" : "Adoption application"}</Text>
         </View>
+
+        {missingProfileFields.length > 0 && (
+          <View className="mb-4 rounded-xl border border-status-warning/20 bg-status-warningBg px-4 py-3" testID="apply-complete-profile">
+            <Text className="font-sans-medium text-sm text-ink">Complete your profile</Text>
+            <Text className="mt-0.5 font-sans text-xs text-muted">
+              Your profile has no {formatMissingFields(missingProfileFields)}. Save it once in Settings and it will be filled in for every application.
+            </Text>
+            <Pressable
+              onPress={() => router.push("/(tabs)/settings")}
+              accessibilityRole="button"
+              accessibilityLabel="Open Settings to complete your profile"
+              testID="apply-open-settings"
+              className="mt-2 self-start"
+            >
+              <Text className="font-sans-medium text-sm text-primary">Go to Settings</Text>
+            </Pressable>
+          </View>
+        )}
 
         {error && (
           <View className="mb-4 rounded-xl border border-status-danger/20 bg-status-dangerBg px-4 py-3">

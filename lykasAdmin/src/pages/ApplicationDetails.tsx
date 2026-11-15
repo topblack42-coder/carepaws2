@@ -6,6 +6,7 @@ import { api, getApiErrorMessage } from "../services/api";
 import { Card } from "../components/ui/SharedUI";
 import { LoadingState, ErrorState } from "../components/ui/StateDisplays";
 import StatusBadge from "../components/ui/StatusBadge";
+import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import TextArea from "../components/ui/TextArea";
 import { useToast } from "../context/ToastContext";
@@ -29,7 +30,18 @@ import {
 interface ApplicationDetail {
   _id: string;
   pet: { _id: string; name: string; species?: string; status?: string; imageUrl?: string | null };
-  applicant: { _id: string; displayName: string; email: string };
+  // phone, address, emailVerified and identityVerificationStatus come from the
+  // applicant's account. They are optional because the server only returns
+  // what it populates; the page copes when they are absent.
+  applicant: {
+    _id: string;
+    displayName: string;
+    email: string;
+    phone?: string | null;
+    address?: string | null;
+    emailVerified?: boolean;
+    identityVerificationStatus?: "unverified" | "pending" | "verified" | "rejected";
+  };
   phone?: string;
   address?: string;
   experience?: string;
@@ -59,6 +71,18 @@ const isDecisionUnlocked = (app: Pick<ApplicationDetail, "status" | "stage">) =>
   app.status === "pending" && app.stage === DECISION_UNLOCK_STAGE;
 
 const NOT_PROVIDED = "Not provided";
+
+const IDENTITY_LABELS = { unverified: "Not verified", pending: "Pending review", verified: "Verified", rejected: "Rejected" } as const;
+
+/** Important details staff need to review an application that are still empty. */
+function getMissingApplicantInfo(app: ApplicationDetail): string[] {
+  const missing: string[] = [];
+  if (!app.phone?.trim()) missing.push("phone number");
+  if (!app.address?.trim()) missing.push("home address");
+  if (app.householdSize == null) missing.push("household size");
+  if (!app.experience?.trim()) missing.push("pet experience");
+  return missing;
+}
 
 const CHIP_TONES = {
   success: "bg-status-successBg text-status-success",
@@ -202,6 +226,14 @@ export default function ApplicationDetails() {
   const stepsToGo = Math.max(0, stageOrder.indexOf(DECISION_UNLOCK_STAGE) - stageOrder.indexOf(application.stage));
   const lockedReason = `Final decision unlocks after ${stageLabel(DECISION_UNLOCK_STAGE)}. Currently at: ${stageLabel(application.stage)} (${stepsToGo} step${stepsToGo === 1 ? "" : "s"} to go).`;
 
+  const missingInfo = getMissingApplicantInfo(application);
+  // The server omits empty fields, so "no phone" and "not sent" look the same.
+  // Only treat the account details as known when it sent its verification flags.
+  const accountDetailsSent = applicant?.emailVerified !== undefined || applicant?.identityVerificationStatus !== undefined;
+  // Details the applicant never saved on their own account (Settings in the app).
+  const accountIncomplete = !applicant?.phone?.trim() || !applicant?.address?.trim();
+  const identityStatus = applicant?.identityVerificationStatus;
+
   const phoneHref = application.phone ? `tel:${application.phone.replace(/[^\d+]/g, "")}` : undefined;
 
   const statusTone = application.status === "approved" ? "success" : rejected ? "danger" : "warning";
@@ -285,6 +317,15 @@ export default function ApplicationDetails() {
               <p className="text-sm text-gray-600">Applied {formatDate(application.createdAt)}{application.reviewedAt && ` · Reviewed ${formatDate(application.reviewedAt)}`}</p>
             </div>
 
+            {missingInfo.length > 0 && (
+              <div className="mb-4">
+                <Alert tone="warning">
+                  <p className="font-medium">Missing information: {missingInfo.join(", ")}.</p>
+                  <p className="mt-0.5">Ask the applicant to complete these in the CarePaws app before moving this application forward.</p>
+                </Alert>
+              </div>
+            )}
+
             <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
               <Field label="Email">
                 <a href={`mailto:${applicant.email}`} className={linkClasses}>{applicant.email}</a>
@@ -306,6 +347,24 @@ export default function ApplicationDetails() {
               )}
               <Field label="Experience" wide>{application.experience || NOT_PROVIDED}</Field>
             </dl>
+
+            {accountDetailsSent && (
+            <section aria-label="Applicant account" className="mt-5 border-t border-gray-200 pt-4" data-testid="applicant-account">
+              <h3 className="mb-3 text-sm font-semibold text-gray-900">Applicant account</h3>
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+                <Field label="Account name">{applicant.displayName}</Field>
+                <Field label="Email verified">{applicant.emailVerified == null ? NOT_PROVIDED : applicant.emailVerified ? "Yes" : "No"}</Field>
+                <Field label="Identity verification">{identityStatus ? IDENTITY_LABELS[identityStatus] : NOT_PROVIDED}</Field>
+                <Field label="Profile phone">{applicant.phone || NOT_PROVIDED}</Field>
+                <Field label="Profile address" wide>{applicant.address || NOT_PROVIDED}</Field>
+              </dl>
+              {accountIncomplete && (
+                <p className="mt-3 text-xs text-gray-600">
+                  This account has no saved phone or address in its profile. Applicants are prompted in the app to fill these in under Settings.
+                </p>
+              )}
+            </section>
+            )}
           </Card>
 
           <Card className="order-1 lg:order-none">

@@ -9,6 +9,7 @@ import { registerForPushNotificationsAsync, unregisterPushNotifications } from "
 import FormInput from "../../components/FormInput";
 import PrimaryButton from "../../components/PrimaryButton";
 import colors from "../../utils/colors";
+import { formatMissingFields, getMissingProfileFields } from "../../utils/profileCompleteness";
 
 export default function SettingsScreen() {
   const { user, refreshUser } = useAuth();
@@ -17,6 +18,8 @@ export default function SettingsScreen() {
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [address, setAddress] = useState(user?.address ?? "");
   const [savingContact, setSavingContact] = useState(false);
+  // Based on what is saved on the account, not on what is typed but unsaved.
+  const missingFields = getMissingProfileFields(user);
 
   async function saveContact() {
     setSavingContact(true);
@@ -68,6 +71,18 @@ export default function SettingsScreen() {
           <Text className="font-display text-xl text-ink">Settings</Text>
         </View>
 
+        {missingFields.length > 0 && (
+          <View className="mb-6 flex-row gap-3 rounded-2xl border border-status-warning/20 bg-status-warningBg p-4" testID="settings-complete-profile">
+            <Ionicons name="alert-circle-outline" size={20} color={colors.warnBrown} />
+            <View className="flex-1">
+              <Text className="font-sans-medium text-sm text-ink">Complete your profile</Text>
+              <Text className="mt-0.5 font-sans text-xs text-muted">
+                Add your {formatMissingFields(missingFields)} below. Shelter staff use these details to review your adoption and foster applications, and we will fill them in for you when you apply.
+              </Text>
+            </View>
+          </View>
+        )}
+
         <View className="mb-6 rounded-2xl border border-border bg-white p-4">
           <View className="flex-row items-center justify-between py-2">
             <View className="flex-1 pr-4">
@@ -84,7 +99,8 @@ export default function SettingsScreen() {
         </View>
 
         <View className="mb-6 rounded-2xl border border-border bg-white p-4">
-          <Text className="mb-2 font-sans-medium text-base text-ink">Contact details</Text>
+          <Text className="font-sans-medium text-base text-ink">Contact details</Text>
+          <Text className="mb-3 mt-0.5 font-sans text-xs text-muted">Shared with the shelter when you apply to adopt or foster.</Text>
           <FormInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="settings-phone" />
           <FormInput label="Home address" value={address} onChangeText={setAddress} testID="settings-address" />
           <PrimaryButton label="Save contact details" onPress={saveContact} loading={savingContact} className="mt-2" testID="settings-save-contact" />

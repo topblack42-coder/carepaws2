@@ -47,8 +47,18 @@ router.put("/:id", protect, adminOnly, async (req, res, next) => {
 
 router.put("/:id/confirm", protect, async (req, res, next) => {
   try {
-    const assignment = await EventVolunteerAssignment.findByIdAndUpdate(req.params.id, { status: "confirmed" }, { new: true });
+    const assignment = await EventVolunteerAssignment.findById(req.params.id);
     if (!assignment) return res.status(404).json({ success: false, message: "Assignment not found" });
+    // Only the assigned volunteer (or staff) may confirm an assignment.
+    const isStaff = ["staff", "admin", "super_admin"].includes(req.user.role);
+    if (!isStaff) {
+      const volunteer = await Volunteer.findOne({ user: req.user._id }).select("_id");
+      if (!volunteer || String(volunteer._id) !== String(assignment.volunteer)) {
+        return res.status(403).json({ success: false, message: "Not authorized to confirm this assignment" });
+      }
+    }
+    assignment.status = "confirmed";
+    await assignment.save();
     res.json({ success: true, data: assignment });
   } catch (err) {
     next(err);

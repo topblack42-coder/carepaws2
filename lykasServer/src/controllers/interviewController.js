@@ -63,7 +63,14 @@ async function getOne(req, res, next) {
   try {
     const interview = await Interview.findById(req.params.id).populate("applicant pet conductedBy application");
     if (!interview) return res.status(404).json({ success: false, message: "Interview not found" });
-    return res.json({ success: true, data: interview });
+    const isStaff = ["staff", "admin", "super_admin"].includes(req.user.role);
+    const ownerId = interview.applicant?._id || interview.applicant;
+    if (!isStaff && String(ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: "Not authorized to view this interview" });
+    }
+    const result = interview.toObject();
+    if (!isStaff && result.application) delete result.application.internalNotes; // staff-only
+    return res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

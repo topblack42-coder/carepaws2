@@ -288,4 +288,30 @@ describe("ApplicationDetails page", () => {
     expect(box).toHaveValue("");
     expect(api.post).toHaveBeenLastCalledWith("/api/applications/app1/notes", { text: "Called applicant" });
   });
+
+  it("warns staff about missing applicant information", async () => {
+    renderPage({ phone: "", householdSize: undefined, experience: "" });
+    expect(await screen.findByText(/Missing information: phone number, household size, pet experience\./)).toBeInTheDocument();
+  });
+
+  it("does not warn when the application is complete", async () => {
+    renderPage();
+    await screen.findByText("Maria Santos");
+    expect(screen.queryByText(/Missing information/)).not.toBeInTheDocument();
+  });
+
+  it("shows the applicant's account details when the server sends them", async () => {
+    renderPage({
+      applicant: { _id: "u1", displayName: "Maria Santos", email: "maria@example.com", emailVerified: true, identityVerificationStatus: "pending", phone: null, address: null },
+    });
+    const account = await screen.findByTestId("applicant-account");
+    expect(within(account).getByText("Pending review")).toBeInTheDocument();
+    expect(within(account).getByText(/no saved phone or address/)).toBeInTheDocument();
+  });
+
+  it("hides the account section when the server sends no account details", async () => {
+    renderPage();
+    await screen.findByText("Maria Santos");
+    expect(screen.queryByTestId("applicant-account")).not.toBeInTheDocument();
+  });
 });

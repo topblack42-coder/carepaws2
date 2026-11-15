@@ -216,7 +216,14 @@ router.get("/:id", protect, async (req, res, next) => {
   try {
     const report = await MonitoringReport.findById(req.params.id).populate(REPORT_POPULATE);
     if (!report) return res.status(404).json({ success: false, message: "Report not found" });
-    res.json({ success: true, data: report });
+    const isStaff = ["staff", "admin", "super_admin"].includes(req.user.role);
+    const ownerId = report.submittedBy?._id || report.submittedBy;
+    if (!isStaff && String(ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ success: false, message: "Not authorized to view this report" });
+    }
+    const result = report.toObject();
+    if (!isStaff && result.application) delete result.application.internalNotes; // staff-only
+    res.json({ success: true, data: result });
   } catch (err) {
     next(err);
   }

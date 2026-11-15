@@ -218,8 +218,15 @@ io.on("connection", (socket) => {
         return;
       }
 
-      // sender is derived server-side — never trust a client-supplied value
-      const sender = socket.userId === userId ? "user" : "shelter";
+      // sender is derived server-side — never trust a client-supplied value.
+      // Only staff may write into another user's conversation (as "shelter");
+      // everyone else may only post into their own.
+      const sender = String(socket.userId) === String(userId) ? "user" : "shelter";
+      if (sender === "shelter" && !isStaff) {
+        const error = { success: false, message: "Not authorized to message this user" };
+        if (typeof acknowledge === "function") acknowledge(error);
+        return;
+      }
 
       const message = await Message.create({ userId, sender, text: text?.trim(), image, isRead: false });
 
