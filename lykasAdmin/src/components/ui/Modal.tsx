@@ -76,9 +76,9 @@ export default function Modal({ isOpen, onClose, title, children, footer }: Moda
         aria-modal="true"
         aria-labelledby="modal-title"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg animate-zoom-in-95 rounded-xl bg-white shadow-xl focus:outline-none motion-reduce:animate-none"
+        className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col animate-zoom-in-95 rounded-xl bg-white shadow-xl focus:outline-none motion-reduce:animate-none"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
           <h2 id="modal-title" className="text-base font-semibold text-gray-900">
             {title}
           </h2>
@@ -91,8 +91,8 @@ export default function Modal({ isOpen, onClose, title, children, footer }: Moda
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">{children}</div>
-        {footer && <div className="flex justify-end gap-2 border-t border-gray-100 px-5 py-4">{footer}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <div className="flex shrink-0 justify-end gap-2 border-t border-gray-100 px-5 py-4">{footer}</div>}
       </div>
     </div>
   );

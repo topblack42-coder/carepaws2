@@ -56,15 +56,11 @@ export default function DecisionCard({
     );
   }
 
-  const lockProps = unlocked
-    ? {}
-    : { "aria-disabled": true as const, title: lockedReason };
-
   return (
     <Card className="scroll-mt-4">
       <h2 id="decision" className="mb-3 text-base font-semibold text-gray-900">Decision</h2>
       {!unlocked && (
-        <p className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+        <p id="decision-lock-reason" className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
           <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <span>{lockedReason}</span>
         </p>
@@ -72,9 +68,8 @@ export default function DecisionCard({
       <div className="grid grid-cols-2 gap-2">
         <Button
           type="button"
-          disabled={busy}
-          {...lockProps}
-          className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          disabled={busy || !unlocked}
+          aria-describedby={!unlocked ? "decision-lock-reason" : undefined}
           onClick={() => unlocked && setMode("approved")}
         >
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Approve
@@ -82,9 +77,8 @@ export default function DecisionCard({
         <Button
           type="button"
           variant="danger"
-          disabled={busy}
-          {...lockProps}
-          className="aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+          disabled={busy || !unlocked}
+          aria-describedby={!unlocked ? "decision-lock-reason" : undefined}
           onClick={() => unlocked && setMode("rejected")}
         >
           <XCircle className="h-4 w-4" aria-hidden="true" /> Reject

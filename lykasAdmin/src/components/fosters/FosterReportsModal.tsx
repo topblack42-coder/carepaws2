@@ -117,6 +117,23 @@ export default function FosterReportsModal({ foster, onClose, onChanged }: Props
             {toReview > 0 ? ` · ${toReview} to review` : ""}
           </p>
 
+          <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200" role="region" aria-label="Weekly report comparison" tabIndex={0}>
+            <table className="w-full min-w-[620px] text-left text-xs">
+              <caption className="px-3 py-2 text-left font-semibold text-gray-800">Week-by-week comparison</caption>
+              <thead><tr className="border-y border-gray-100 text-gray-500"><th scope="col" className="px-3 py-2">Week</th><th scope="col" className="px-3 py-2">Weight</th><th scope="col" className="px-3 py-2">Appetite</th><th scope="col" className="px-3 py-2">Energy</th><th scope="col" className="px-3 py-2">Progress</th><th scope="col" className="px-3 py-2">Health</th></tr></thead>
+              <tbody>{weeks.map(({ week, report, overdue }) => {
+                const flags = report ? attentionReasons(report) : [];
+                return <tr key={week} className="border-b border-gray-50 last:border-0">
+                  <th scope="row" className="px-3 py-2 font-medium text-gray-800">Week {week}</th>
+                  <td className="px-3 py-2">{report?.weightChange !== undefined ? `${report.weightChange > 0 ? "+" : ""}${report.weightChange}` : "—"}</td>
+                  <td className="px-3 py-2">{report?.appetite || "—"}</td><td className="px-3 py-2">{report?.energy || "—"}</td>
+                  <td className="px-3 py-2">{report?.overallProgress || (overdue ? "Overdue" : "Not submitted")}</td>
+                  <td className={`px-3 py-2 ${flags.length ? "font-semibold text-status-danger" : "text-gray-600"}`}>{flags.length ? flags.join(" · ") : report ? "No flag" : overdue ? "Report overdue" : "—"}</td>
+                </tr>;
+              })}</tbody>
+            </table>
+          </div>
+
           <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
             {weeks.map(({ week, report, overdue }) => {
               const reasons = report ? attentionReasons(report) : [];

@@ -58,12 +58,14 @@ export default function Adoptions() {
         error={applications.error}
         onRetry={applications.reload}
         emptyTitle="No applications yet"
+        emptyDescription="Try changing your search or filters, or check back when an application is submitted."
         searchValue={applications.search}
         onSearchChange={applications.onSearchChange}
         searchPlaceholder="Search applicant name…"
         filters={[
           { key: "status", label: "Status", options: [{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Rejected" }] },
           { key: "type", label: "Type", options: [{ value: "adoption", label: "Adoption" }, { value: "foster", label: "Foster" }] },
+          { key: "stage", label: "Stage", options: Object.entries(STAGE_LABELS).map(([value, label]) => ({ value, label })) },
         ]}
         filterValues={applications.filters}
         onFilterChange={applications.onFilterChange}

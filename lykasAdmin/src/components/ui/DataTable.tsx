@@ -73,7 +73,7 @@ export default function DataTable<T>({
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder={searchPlaceholder}
             className="pl-9"
-            aria-label="Search"
+            aria-label={searchPlaceholder.startsWith("Search") ? searchPlaceholder.replace(/[.…]+$/, "") : "Search"}
           />
         </div>
         {filters?.map((filter) => (
@@ -101,8 +101,8 @@ export default function DataTable<T>({
       ) : rows.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <div className="overflow-x-auto" role="region" aria-label="Results table" tabIndex={0}>
+          <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-gray-100 text-xs uppercase tracking-wide text-gray-400">
                 {columns.map((col) => (

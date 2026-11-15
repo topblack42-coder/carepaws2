@@ -151,9 +151,9 @@ describe("ApplicationDetails page", () => {
     const callout = "Final decision unlocks after Risk assessment. Currently at: Submitted (4 steps to go).";
     expect(screen.getByText(callout)).toBeInTheDocument();
     const approve = screen.getByRole("button", { name: "Approve" });
-    expect(approve).toHaveAttribute("aria-disabled", "true");
-    expect(approve).toHaveAttribute("title", callout);
-    expect(screen.getByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
+    expect(approve).toBeDisabled();
+    expect(approve).toHaveAttribute("aria-describedby", "decision-lock-reason");
+    expect(screen.getByRole("button", { name: "Reject" })).toBeDisabled();
 
     await user.click(approve);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

@@ -54,6 +54,12 @@ function endDateBadge(f: Foster): { label: string; tone: "danger" | "warning" } 
   return days <= 7 ? { label: days <= 1 ? "Ends tomorrow" : `Ends in ${days}d`, tone: "warning" } : null;
 }
 
+function extendedEndDate(value: string, days: number): string {
+  const date = new Date(value);
+  date.setDate(date.getDate() + days);
+  return date.toLocaleDateString();
+}
+
 interface FosterApplication {
   _id: string;
   applicant: { _id: string; displayName: string };
@@ -85,9 +91,14 @@ export default function Fosters() {
 
   // Which placements have reports waiting for staff, and whether any of them look worrying.
   const [pending, setPending] = useState<Map<string, { count: number; attention: boolean }>>(new Map());
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  const [overdueWeeks, setOverdueWeeks] = useState<Map<string, number | null>>(new Map());
   const [reportsFor, setReportsFor] = useState<Foster | null>(null);
 
   const loadPending = useCallback(() => {
+    setPendingLoading(true);
+    setPendingError(null);
     api
       .get("/api/foster/reports/pending-review")
       .then((res) => {
@@ -100,8 +111,12 @@ export default function Fosters() {
           next.set(id, entry);
         }
         setPending(next);
+        setPendingLoading(false);
       })
-      .catch(() => {});
+      .catch((err) => {
+        setPendingError(getApiErrorMessage(err, "Could not load foster report alerts."));
+        setPendingLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -109,10 +124,28 @@ export default function Fosters() {
   }, [loadPending]);
   useRealtime(["WeeklyFosterReport"], loadPending);
 
+  useEffect(() => {
+    let cancelled = false;
+    const active = list.rows.filter((f) => f.status === "active");
+    void Promise.all(active.map(async (f) => {
+      try {
+        const res = await api.get(`/api/foster/${f._id}/reports/missing`);
+        return [f._id, (res.data.data?.overdueWeeks ?? []).length] as const;
+      } catch {
+        return [f._id, null] as const;
+      }
+    })).then((results) => {
+      if (!cancelled) setOverdueWeeks(new Map(results));
+    });
+    return () => { cancelled = true; };
+  }, [list.rows]);
+
   // Finishing or extending an active placement.
   const [managing, setManaging] = useState<Foster | null>(null);
   const [mode, setMode] = useState<ManageMode>("EXTEND");
   const [readiness, setReadiness] = useState<Readiness | null>(null);
+  const [readinessLoading, setReadinessLoading] = useState(false);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
   const [extensionDays, setExtensionDays] = useState("14");
   const [extensionReason, setExtensionReason] = useState("");
   const [vetAgreed, setVetAgreed] = useState(false);
@@ -122,6 +155,7 @@ export default function Fosters() {
   const [vetVerified, setVetVerified] = useState(false);
   const [exceptionReason, setExceptionReason] = useState("");
   const [staffNotes, setStaffNotes] = useState("");
+  const [closureConfirmed, setClosureConfirmed] = useState(false);
   const [manageError, setManageError] = useState<string | null>(null);
   const [managingSaving, setManagingSaving] = useState(false);
 
@@ -142,12 +176,27 @@ export default function Fosters() {
         );
       },
     },
-    { key: "reports", header: "Weekly reports", accessor: (f) => `${f.weeklyReportsSubmitted}/${f.weeklyReportsRequired}` },
+    { key: "reports", header: "Weekly reports", accessor: (f) => (
+      <div>
+        <span>{f.weeklyReportsSubmitted}/{f.weeklyReportsRequired} submitted</span>
+        {f.status === "active" && overdueWeeks.has(f._id) && (
+          <div className="mt-1">
+            {overdueWeeks.get(f._id) === null ? (
+              <span className="text-xs text-status-danger">Overdue status unavailable</span>
+            ) : overdueWeeks.get(f._id)! > 0 ? (
+              <StatusBadge status={`${overdueWeeks.get(f._id)} overdue`} tone="danger" />
+            ) : null}
+          </div>
+        )}
+      </div>
+    ) },
     {
       key: "toReview",
       header: "To review",
       accessor: (f) => {
         const entry = pending.get(f._id);
+        if (pendingLoading) return "Loading…";
+        if (pendingError) return <span className="text-status-danger">Unavailable</span>;
         if (!entry) return "—";
         return entry.attention ? (
           <StatusBadge status={`${entry.count} · needs attention`} tone="danger" />
@@ -212,6 +261,19 @@ export default function Fosters() {
       .catch(() => {});
   }
 
+  async function refreshReadiness(foster: Foster) {
+    setReadinessError(null);
+    setReadinessLoading(true);
+    try {
+      const res = await api.get(`/api/foster/${foster._id}/can-finalize`);
+      setReadiness(res.data.data ?? null);
+    } catch (err) {
+      setReadinessError(getApiErrorMessage(err, "Could not load placement checks."));
+    } finally {
+      setReadinessLoading(false);
+    }
+  }
+
   async function openManageModal(foster: Foster) {
     setManaging(foster);
     setMode(foster.returnRequest?.status === "open" ? "RETURNED" : "EXTEND");
@@ -224,20 +286,20 @@ export default function Fosters() {
     setVetVerified(false);
     setExceptionReason("");
     setStaffNotes("");
+    setClosureConfirmed(false);
     setManageError(null);
     setReadiness(null);
-    try {
-      const res = await api.get(`/api/foster/${foster._id}/can-finalize`);
-      setReadiness(res.data.data ?? null);
-    } catch {
-      /* the checklist is advisory; the server enforces the same rules when saving */
-    }
+    await refreshReadiness(foster);
   }
 
   async function submitManage(e: FormEvent) {
     e.preventDefault();
     if (!managing) return;
     setManageError(null);
+    if (readinessLoading || !readiness) {
+      setManageError("Load the placement checks before continuing.");
+      return;
+    }
 
     if (mode === "EXTEND") {
       const days = Number(extensionDays);
@@ -267,6 +329,11 @@ export default function Fosters() {
         setManageError("Some reports are missing or unreviewed. Review them, or have an admin record the reason for an exception.");
         return;
       }
+    }
+
+    if (mode !== "EXTEND" && !closureConfirmed) {
+      setClosureConfirmed(true);
+      return;
     }
 
     setManagingSaving(true);
@@ -363,6 +430,12 @@ export default function Fosters() {
         description="Active and past foster placements."
         actions={<Button onClick={openPlacementModal}><Plus className="h-4 w-4" aria-hidden="true" /> Start placement</Button>}
       />
+      {pendingError && (
+        <div className="mb-4"><Alert tone="danger">
+          <span>{pendingError} Report counts may be out of date. </span>
+          <button type="button" className="font-semibold underline" onClick={loadPending}>Retry</button>
+        </Alert></div>
+      )}
       <DataTable
         columns={columns}
         rows={list.rows}
@@ -371,6 +444,7 @@ export default function Fosters() {
         error={list.error}
         onRetry={list.reload}
         emptyTitle="No foster placements yet"
+        emptyDescription="Try changing your search or status filter, or start a placement from an approved foster application."
         searchValue={list.search}
         onSearchChange={list.onSearchChange}
         filters={[{ key: "status", label: "Status", options: [{ value: "active", label: "Active" }, { value: "completed", label: "Completed" }, { value: "cancelled", label: "Cancelled" }] }]}
@@ -465,12 +539,17 @@ export default function Fosters() {
         footer={<>
           <Button variant="secondary" onClick={() => setManaging(null)} disabled={managingSaving}>Cancel</Button>
           <Button type="submit" form="manage-foster-placement" loading={managingSaving}>
-            {mode === "EXTEND" ? "Extend foster period" : "Complete placement"}
+            {mode === "EXTEND" ? "Extend foster period" : closureConfirmed ? "Confirm placement closure" : "Review placement closure"}
           </Button>
         </>}
       >
         <form id="manage-foster-placement" onSubmit={submitManage}>
           {manageError && <div className="mb-4"><Alert tone="danger">{manageError}</Alert></div>}
+          {readinessLoading && <div className="mb-4"><Alert tone="info">Checking reports and health alerts…</Alert></div>}
+          {readinessError && <div className="mb-4"><Alert tone="danger">
+            <span>{readinessError} </span>
+            <button type="button" className="font-semibold underline" onClick={() => managing && void refreshReadiness(managing)}>Retry</button>
+          </Alert></div>}
           {readiness?.returnRequest && (
             <div className="mb-4">
               <Alert tone={readiness.returnRequest.urgency === "emergency" ? "danger" : "warning"}>
@@ -494,8 +573,13 @@ export default function Fosters() {
               </Alert>
             </div>
           )}
+          {closureConfirmed && mode !== "EXTEND" && (
+            <div className="mb-4"><Alert tone="warning">
+              Confirm closure: {managing?.pet?.name ?? "This pet"} will leave the foster placement. Outcome: {mode === "ADOPTED" ? "adopted by the fosterer" : "returned to the shelter"}. Review the health check and notes, then confirm below.
+            </Alert></div>
+          )}
           <FormField label="What is happening?" htmlFor="foster-outcome">
-            <Select id="foster-outcome" value={mode} onChange={(e) => setMode(e.target.value as ManageMode)}>
+            <Select id="foster-outcome" value={mode} onChange={(e) => { setMode(e.target.value as ManageMode); setClosureConfirmed(false); }}>
               <option value="EXTEND">Extend the foster period</option>
               <option value="ADOPTED">Fosterer is adopting the pet</option>
               <option value="RETURNED">Pet is returned to the shelter</option>
@@ -517,6 +601,11 @@ export default function Fosters() {
                 <p className="mt-1 text-xs text-gray-500">
                   {MIN_EXTENSION_DAYS} to {MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)} days. The pet stays with the fosterer, stays in foster care, and weekly reports continue.
                 </p>
+                  {managing?.expectedEndDate && Number(extensionDays) > 0 && (
+                    <p className="mt-1 text-sm font-medium text-gray-800">
+                      Current end date: {new Date(managing.expectedEndDate).toLocaleDateString()} · New end date: {extendedEndDate(managing.expectedEndDate, Number(extensionDays))}
+                    </p>
+                  )}
               </FormField>
               <FormField label="Why is an extension needed?" htmlFor="foster-extension-reason">
                 <TextArea id="foster-extension-reason" rows={3} required value={extensionReason} onChange={(e) => setExtensionReason(e.target.value)} />

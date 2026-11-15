@@ -381,6 +381,9 @@ export default function ApplicationDetails() {
               )}
             </section>
             )}
+            <Link to="/documents" className={`${linkClasses} mt-3 inline-block text-sm`}>
+              Review applicant documents
+            </Link>
           </Card>
 
           <Card className="order-1 lg:order-none">

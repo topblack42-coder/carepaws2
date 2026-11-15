@@ -133,7 +133,7 @@ describe("Fosters page: safeguards", () => {
     expect(screen.queryByLabelText(/Admin exception/)).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Health check you did on the pet"), "Seen in person, healthy and eating well");
-    await user.click(screen.getByRole("button", { name: "Complete placement" }));
+    await user.click(screen.getByRole("button", { name: "Review placement closure" }));
     expect(await screen.findByText(/Some reports are missing or unreviewed/)).toBeInTheDocument();
     expect(api.put).not.toHaveBeenCalled();
   });
@@ -150,7 +150,9 @@ describe("Fosters page: safeguards", () => {
     await user.selectOptions(select, "ADOPTED");
     await user.type(screen.getByLabelText("Health check you did on the pet"), "Seen in person, healthy and eating well");
     await user.type(screen.getByLabelText(/Admin exception/), "Fosterer unreachable, checked in person");
-    await user.click(screen.getByRole("button", { name: "Complete placement" }));
+    await user.click(screen.getByRole("button", { name: "Review placement closure" }));
+    expect(await screen.findByText(/Confirm closure: Bantay/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm placement closure" }));
 
     await waitFor(() =>
       expect(api.put).toHaveBeenCalledWith("/api/foster/f1/end", {
@@ -170,7 +172,7 @@ describe("Fosters page: safeguards", () => {
 
     await user.selectOptions(select, "RETURNED");
     await user.type(screen.getByLabelText("Health check you did on the pet"), "Seen in person, limping slightly");
-    await user.click(screen.getByRole("button", { name: "Complete placement" }));
+    await user.click(screen.getByRole("button", { name: "Review placement closure" }));
     expect(await screen.findByText(/A veterinarian must check the pet first/)).toBeInTheDocument();
     expect(api.put).not.toHaveBeenCalled();
   });
