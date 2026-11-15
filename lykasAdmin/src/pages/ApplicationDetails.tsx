@@ -48,6 +48,7 @@ interface ApplicationDetail {
   householdSize?: number;
   isRenting?: boolean;
   landlordApproval?: boolean;
+  landlordProofUrl?: string | null;
   type: "adoption" | "foster";
   fosterPeriod?: string;
   preferredPickupDate?: string;
@@ -337,6 +338,21 @@ export default function ApplicationDetails() {
               <Field label="Household size">{application.householdSize ?? NOT_PROVIDED}</Field>
               <Field label="Renting">{application.isRenting ? "Yes" : "No"}</Field>
               <Field label="Landlord approval">{application.isRenting ? (application.landlordApproval ? "Yes" : "No") : "N/A"}</Field>
+              {application.isRenting && (
+                <Field label="Landlord approval photo" wide>
+                  {application.landlordProofUrl ? (
+                    <a href={application.landlordProofUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                      <img
+                        src={application.landlordProofUrl}
+                        alt="Landlord approval for pets"
+                        className="max-h-64 rounded-lg border border-gray-200 object-contain"
+                      />
+                    </a>
+                  ) : (
+                    NOT_PROVIDED
+                  )}
+                </Field>
+              )}
               {application.type === "foster" && <Field label="Foster period">{application.fosterPeriod || NOT_PROVIDED}</Field>}
               {application.type === "foster" && (
                 <Field label="Preferred pickup">

@@ -36,6 +36,8 @@ function publicUser(user) {
     notificationsEnabled: user.notificationsEnabled,
     phone: user.phone,
     address: user.address,
+    isRenting: Boolean(user.isRenting),
+    landlordProofUrl: user.landlordProofUrl || null,
   };
 }
 
@@ -773,10 +775,12 @@ async function toggleFavorite(req, res, next) {
 // PUT /api/auth/profile
 async function updateProfile(req, res, next) {
   try {
-    const allowed = ["displayName", "phone", "address", "notificationsEnabled", "pushToken"];
+    const allowed = ["displayName", "phone", "address", "notificationsEnabled", "pushToken", "isRenting"];
     for (const key of allowed) {
       if (req.body[key] !== undefined) req.user[key] = req.body[key];
     }
+    // Not renting any more: the landlord photo no longer applies.
+    if (req.body.isRenting === false) req.user.landlordProofUrl = null;
     await req.user.save();
     return res.json({ success: true, data: publicUser(req.user) });
   } catch (err) {

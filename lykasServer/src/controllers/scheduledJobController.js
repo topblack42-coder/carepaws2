@@ -1,10 +1,11 @@
 const ScheduledJobLog = require("../models/ScheduledJobLog");
-const { runVaccinationReminders, runDocumentExpiryReminders, runFosterReportMonitoring, runMonitoringReportMonitoring } = require("../jobs/reminderJobs");
+const { runVaccinationReminders, runDocumentExpiryReminders, runFosterReportMonitoring, runFosterEndDateAlerts, runMonitoringReportMonitoring } = require("../jobs/reminderJobs");
 
 const JOBS = {
   vaccination_reminders: runVaccinationReminders,
   document_expiry_reminders: runDocumentExpiryReminders,
   foster_report_monitoring: runFosterReportMonitoring,
+  foster_end_date_alerts: runFosterEndDateAlerts,
   monitoring_report_monitoring: runMonitoringReportMonitoring,
 };
 

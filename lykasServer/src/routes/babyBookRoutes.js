@@ -25,20 +25,21 @@ function isStaff(user) {
 }
 
 function ownsPet(pet, user) {
-  return Boolean(pet && pet.owner && pet.owner.equals(user._id));
+  // The adoption owner, or the fosterer while the pet is in their care.
+  return Boolean(pet && ((pet.owner && pet.owner.equals(user._id)) || (pet.currentFosterer && pet.currentFosterer.equals(user._id))));
 }
 
 // Staff can view any pet's baby book (shelter/foster oversight); everyone
 // else only their own pet's, matching the ownership model used by /my below.
 async function canAccessPet(user, petId) {
-  const pet = await Pet.findById(petId).select("owner");
+  const pet = await Pet.findById(petId).select("owner currentFosterer");
   if (!pet) return false;
   return isStaff(user) || ownsPet(pet, user);
 }
 
 router.get("/my", protect, async (req, res, next) => {
   try {
-    const myPets = await Pet.find({ owner: req.user._id }).select("_id");
+    const myPets = await Pet.find({ $or: [{ owner: req.user._id }, { currentFosterer: req.user._id }] }).select("_id");
     const entries = await BabyBook.find({ pet: { $in: myPets.map((p) => p._id) } }).sort({ date: -1 });
     res.json({ success: true, data: entries });
   } catch (err) {
@@ -64,7 +65,7 @@ router.get("/entry/:id", protect, async (req, res, next) => {
 // JSON entries (text-only) as well as FormData ones that include a photo.
 router.post("/", protect, uploadImage.single("photo"), validateRequest(babyBookCreateSchema), async (req, res, next) => {
   try {
-    const pet = await Pet.findById(req.body.pet).select("owner");
+    const pet = await Pet.findById(req.body.pet).select("owner currentFosterer");
     if (!pet) return res.status(404).json({ success: false, message: "Pet not found" });
     if (!isStaff(req.user) && !ownsPet(pet, req.user)) {
       return res.status(403).json({ success: false, message: "You can only add baby book entries for your own pets" });

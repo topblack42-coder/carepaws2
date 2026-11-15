@@ -76,4 +76,32 @@ router.post("/profile-picture", protect, uploadImage.single("image"), async (req
   }
 });
 
+// Photo of the landlord's approval for pets (renters only). Staff see it on the application.
+router.post("/landlord-proof", protect, uploadImage.single("image"), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: "No image uploaded" });
+    const cloudinary = require("../config/cloudinary");
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream({ folder: "carepaws/landlord-proofs" }, (err, r) => (err ? reject(err) : resolve(r)));
+      stream.end(req.file.buffer);
+    });
+    req.user.isRenting = true;
+    req.user.landlordProofUrl = result.secure_url;
+    await req.user.save();
+    return res.json({ success: true, data: { isRenting: true, landlordProofUrl: req.user.landlordProofUrl } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/landlord-proof", protect, async (req, res, next) => {
+  try {
+    req.user.landlordProofUrl = null;
+    await req.user.save();
+    return res.json({ success: true, data: { landlordProofUrl: null } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 module.exports = router;

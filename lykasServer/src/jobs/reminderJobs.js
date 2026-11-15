@@ -9,6 +9,7 @@ const MonitoringReport = require("../models/MonitoringReport");
 const { MONITORING_PERIODS, getMonitoringSchedule } = require("../utils/monitoringSchedule");
 const Notification = require("../models/Notification");
 const logger = require("../utils/logger");
+const { endDateAlertStage } = require("../utils/fosterRules");
 
 /**
  * Reminder emails/notifications for upcoming appointments and follow-ups.
@@ -26,12 +27,14 @@ async function runVaccinationReminders({ triggeredBy = "cron", triggeredByUser =
     const inTwoWeeks = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
     const dueVaccinations = await Vaccination.find({
       nextDueDate: { $lte: inTwoWeeks, $gte: new Date() },
-    }).populate({ path: "pet", populate: { path: "owner" } });
+    }).populate({ path: "pet", populate: [{ path: "owner" }, { path: "currentFosterer" }] });
 
     for (const vac of dueVaccinations) {
-      if (!vac.pet?.owner) continue;
+      // The adoption owner, or the fosterer while the pet is in foster care.
+      const caregiver = vac.pet?.owner || vac.pet?.currentFosterer;
+      if (!caregiver) continue;
       await notifyOnce({
-        recipient: vac.pet.owner._id || vac.pet.owner,
+        recipient: caregiver._id || caregiver,
         type: "VACCINATION_DUE",
         title: "Vaccination due soon",
         message: `${vac.pet.name}'s ${vac.vaccineName} vaccination is due on ${vac.nextDueDate.toDateString()}.`,
@@ -249,6 +252,127 @@ async function runFosterReportMonitoring({ triggeredBy = "cron", triggeredByUser
 }
 
 /**
+ * Warns before a foster placement ends and escalates when it runs past its end date.
+ *
+ * Stages (see endDateAlertStage): 7 days before, 1 day before, overdue, then
+ * escalations to admins at 3 and 7 days overdue. Each stage is sent once per
+ * end date; extending a placement changes the end date and so restarts the alerts.
+ */
+async function runFosterEndDateAlerts({ triggeredBy = "cron", triggeredByUser = null } = {}) {
+  const startedAt = new Date();
+  let itemsProcessed = 0;
+  let status = "success";
+  let message = "";
+
+  try {
+    const now = new Date();
+    const fosters = await Foster.find({ status: "active", expectedEndDate: { $exists: true, $ne: null } })
+      .populate("pet", "name")
+      .populate("fosterer", "displayName phone");
+
+    const recipientsByRole = async (roles) =>
+      User.find({ role: { $in: roles }, status: "active", isDeleted: { $ne: true } }).select("_id");
+    const allStaff = await recipientsByRole(["staff", "admin", "super_admin"]);
+    const admins = await recipientsByRole(["admin", "super_admin"]);
+
+    for (const foster of fosters) {
+      const info = endDateAlertStage(foster.expectedEndDate, now);
+      if (!info || foster.endAlertStage === info.stage) continue;
+
+      const petName = foster.pet?.name ?? "a pet";
+      const fostererName = foster.fosterer?.displayName ?? "the fosterer";
+      const endLabel = new Date(foster.expectedEndDate).toDateString();
+      const contact = [
+        foster.fosterer?.phone ? `Fosterer phone: ${foster.fosterer.phone}.` : null,
+        foster.emergencyContact?.phone ? `Emergency contact: ${foster.emergencyContact.name} ${foster.emergencyContact.phone}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+
+      const plan = {
+        ending_7d: {
+          type: "FOSTER_ENDING_SOON",
+          fosterer: { title: "Your foster period ends soon", message: `${petName}'s foster period ends on ${endLabel}. Please arrange the next step with the shelter.` },
+          staff: { title: "Foster placement ending soon", message: `${petName} (${fostererName}) ends on ${endLabel}: ${info.daysLeft} day(s) left. Plan the outcome: adopt, return or extend.` },
+          staffList: allStaff,
+        },
+        ending_1d: {
+          type: "FOSTER_ENDING_SOON",
+          fosterer: { title: "Your foster period ends tomorrow", message: `${petName}'s foster period ends on ${endLabel}. Please contact the shelter today.` },
+          staff: { title: "Foster placement ends tomorrow", message: `${petName} (${fostererName}) ends on ${endLabel}. Decide the outcome now.` },
+          staffList: allStaff,
+        },
+        overdue: {
+          type: "FOSTER_OVERDUE",
+          fosterer: { title: "Your foster period has ended", message: `${petName}'s foster period ended on ${endLabel}. Please contact the shelter to return or adopt.` },
+          staff: { title: "Foster placement is overdue", message: `${petName} (${fostererName}) passed its end date (${endLabel}). ${contact}`.trim() },
+          staffList: allStaff,
+        },
+        overdue_3d: {
+          type: "FOSTER_OVERDUE",
+          fosterer: { title: "Your foster period is overdue", message: `${petName}'s foster period ended ${info.daysOverdue} days ago. Please contact the shelter now.` },
+          staff: { title: "ESCALATION: foster overdue 3+ days", message: `${petName} (${fostererName}) is ${info.daysOverdue} days past its end date (${endLabel}). Contact the fosterer and decide the outcome. ${contact}`.trim() },
+          staffList: admins,
+        },
+        overdue_7d: {
+          type: "FOSTER_OVERDUE",
+          fosterer: { title: "Foster period seriously overdue", message: `${petName}'s foster period ended ${info.daysOverdue} days ago. The shelter needs to hear from you today.` },
+          staff: { title: "ESCALATION: foster overdue 7+ days", message: `${petName} (${fostererName}) is ${info.daysOverdue} days past its end date (${endLabel}). Use the emergency contact if the fosterer does not respond. ${contact}`.trim() },
+          staffList: admins,
+        },
+      }[info.stage];
+
+      const keyBase = `foster-end:${foster._id}:${new Date(foster.expectedEndDate).getTime()}:${info.stage}`;
+      const fostererId = foster.fosterer?._id ?? foster.fosterer;
+      if (fostererId) {
+        const sent = await notifyOnce({
+          recipient: fostererId,
+          type: plan.type,
+          ...plan.fosterer,
+          refModel: "Foster",
+          refId: foster._id,
+          dedupeKey: `${keyBase}:fosterer`,
+        });
+        if (sent) itemsProcessed += 1;
+      }
+      for (const recipient of plan.staffList) {
+        const sent = await notifyOnce({
+          recipient: recipient._id,
+          type: plan.type,
+          ...plan.staff,
+          refModel: "Foster",
+          refId: foster._id,
+          dedupeKey: `${keyBase}:staff:${recipient._id}`,
+        });
+        if (sent) itemsProcessed += 1;
+      }
+
+      foster.endAlertStage = info.stage;
+      await foster.save();
+    }
+  } catch (err) {
+    status = "failed";
+    message = err.message;
+    logger.error({ err }, "runFosterEndDateAlerts failed");
+  }
+
+  await ScheduledJobLog.create({
+    jobKey: "foster_end_date_alerts",
+    label: "Foster end-date alerts and overdue escalation",
+    status,
+    startedAt,
+    finishedAt: new Date(),
+    durationMs: Date.now() - startedAt.getTime(),
+    itemsProcessed,
+    triggeredBy,
+    triggeredByUser,
+    message,
+  });
+
+  return { status, itemsProcessed };
+}
+
+/**
  * Maintains the post-adoption monitoring schedule for completed adoptions.
  *
  * Each completed adoption gets one MonitoringReport record per configured
@@ -367,4 +491,4 @@ async function runMonitoringReportMonitoring({ triggeredBy = "cron", triggeredBy
 }
 
 
-module.exports = { runVaccinationReminders, runDocumentExpiryReminders, runFosterReportMonitoring, runMonitoringReportMonitoring };
+module.exports = { runVaccinationReminders, runDocumentExpiryReminders, runFosterReportMonitoring, runFosterEndDateAlerts, runMonitoringReportMonitoring };

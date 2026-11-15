@@ -66,6 +66,7 @@ const updateProfileSchema = z
     displayName: z.string().min(2).max(100).optional(),
     phone: z.string().optional(),
     address: z.string().optional(),
+    isRenting: z.boolean().optional(),
     notificationsEnabled: z.boolean().optional(),
     // Nullable — the mobile app explicitly PUTs { pushToken: null } to clear
     // the token server-side when the user disables push notifications.

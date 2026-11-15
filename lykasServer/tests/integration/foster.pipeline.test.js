@@ -3,6 +3,7 @@ const request = require("supertest");
 jest.mock("../../src/middleware/rateLimitMiddleware", () => ({
   globalLimiter: (req, res, next) => next(),
   loginLimiter: (req, res, next) => next(),
+  registerLimiter: (req, res, next) => next(),
   passwordResetLimiter: (req, res, next) => next(),
   resendVerificationLimiter: (req, res, next) => next(),
   resetLinkLimiter: (req, res, next) => next(),
@@ -16,6 +17,8 @@ const Application = require("../../src/models/Application");
 const { Foster, WeeklyFosterReport, getFosterReportDueDate } = require("../../src/models/Foster");
 const Notification = require("../../src/models/Notification");
 const { runFosterReportMonitoring } = require("../../src/jobs/reminderJobs");
+
+const HEALTH_CHECK = { notes: "Checked in person, healthy and eating well.", vetVerified: false };
 
 async function registerAndLogin(email, role = "user") {
   const res = await request(app)
@@ -200,7 +203,7 @@ describe("Foster placement pipeline", () => {
     const res = await request(app)
       .put(`/api/foster/${foster._id}/end`)
       .set("Authorization", `Bearer ${staffToken}`)
-      .send({ outcome: "RETURNED" });
+      .send({ outcome: "RETURNED", finalHealthCheck: HEALTH_CHECK });
 
     expect(res.status).toBe(409);
     expect((await Foster.findById(foster._id)).status).toBe("active");
@@ -332,7 +335,7 @@ describe("Foster placement pipeline", () => {
     expect(stored.expectedEndDate.toISOString()).toBe("2026-09-29T09:00:00.000Z");
   });
 
-  it("extends an active foster instead of closing it, capped at 30 extra days", async () => {
+  async function createOldActiveFoster(extra = {}) {
     const foster = await Foster.create({
       pet: pet._id,
       fosterer: applicantUserId,
@@ -342,27 +345,149 @@ describe("Foster placement pipeline", () => {
       trialDurationDays: 30,
       weeklyReportsRequired: 5,
       status: "active",
+      ...extra,
     });
-    await Pet.findByIdAndUpdate(pet._id, { status: "Foster" });
+    await Pet.findByIdAndUpdate(pet._id, { status: "Foster", currentFosterer: applicantUserId });
+    return foster;
+  }
 
-    const extended = await request(app)
-      .put(`/api/foster/${foster._id}/end`)
-      .set("Authorization", `Bearer ${staffToken}`)
-      .send({ outcome: "EXTENDED", extensionDays: 14 });
+  async function seedReports(foster, { reviewed = true, extra = {} } = {}) {
+    const staff = await User.findOne({ email: "foster-staff@example.com" });
+    for (let weekNumber = 1; weekNumber <= foster.weeklyReportsRequired; weekNumber += 1) {
+      await WeeklyFosterReport.create({
+        foster: foster._id,
+        pet: foster.pet,
+        fosterer: foster.fosterer,
+        weekNumber,
+        dueDate: getFosterReportDueDate(foster, weekNumber),
+        status: "submitted",
+        reportDate: new Date(),
+        submittedAt: new Date(),
+        overallProgress: "Good",
+        reviewedBy: reviewed ? staff._id : null,
+        ...extra,
+      });
+    }
+  }
+
+  const EXTENSION = { extensionDays: 14, reason: "Dog is still recovering from surgery.", vetAgreed: true, fostererAgreed: true };
+
+  it("extends an active foster through /extend, records the recommendation, and caps the total at 30 days", async () => {
+    const foster = await createOldActiveFoster();
+    await seedReports(foster);
+
+    const extended = await request(app).put(`/api/foster/${foster._id}/extend`).set("Authorization", `Bearer ${staffToken}`).send(EXTENSION);
     expect(extended.status).toBe(200);
     const stored = await Foster.findById(foster._id);
     expect(stored.status).toBe("active");
+    expect(stored.outcome).toBeNull();
     expect(stored.extendedDays).toBe(14);
     expect(stored.trialDurationDays).toBe(44);
     expect(stored.weeklyReportsRequired).toBe(7);
     expect(stored.expectedEndDate.toISOString()).toBe("2026-10-06T00:00:00.000Z");
+    expect(stored.extensions).toHaveLength(1);
+    expect(stored.extensions[0]).toMatchObject({ days: 14, reason: EXTENSION.reason, vetAgreed: true, fostererAgreed: true });
+    expect(String(stored.extensions[0].authorizedBy)).toBeTruthy();
     expect((await Pet.findById(pet._id)).status).toBe("Foster");
 
-    const tooMuch = await request(app)
+    const tooMuch = await request(app).put(`/api/foster/${foster._id}/extend`).set("Authorization", `Bearer ${staffToken}`).send({ ...EXTENSION, extensionDays: 20 });
+    expect(tooMuch.status).toBe(409);
+  });
+
+  it("rejects negative, too-short and reason-less extensions, and extensions without reviewed reports", async () => {
+    const foster = await createOldActiveFoster();
+    const send = (body) => request(app).put(`/api/foster/${foster._id}/extend`).set("Authorization", `Bearer ${staffToken}`).send(body);
+
+    expect((await send({ ...EXTENSION, extensionDays: -10 })).status).toBe(400);
+    expect((await send({ ...EXTENSION, extensionDays: 3 })).status).toBe(400);
+    expect((await send({ ...EXTENSION, reason: "" })).status).toBe(400);
+    // No reports at all yet: nothing to base the extension on.
+    expect((await send(EXTENSION)).status).toBe(409);
+
+    const stored = await Foster.findById(foster._id);
+    expect(stored.extendedDays).toBe(0);
+    expect(stored.expectedEndDate.toISOString()).toBe("2026-09-22T00:00:00.000Z");
+  });
+
+  it("no longer accepts EXTENDED or unknown outcomes on /end", async () => {
+    const foster = await createOldActiveFoster();
+    for (const outcome of ["EXTENDED", "BOGUS"]) {
+      const res = await request(app)
+        .put(`/api/foster/${foster._id}/end`)
+        .set("Authorization", `Bearer ${staffToken}`)
+        .send({ outcome, extensionDays: 14, finalHealthCheck: HEALTH_CHECK });
+      expect(res.status).toBe(400);
+    }
+    expect((await Foster.findById(foster._id)).status).toBe("active");
+    expect((await Pet.findById(pet._id)).status).toBe("Foster");
+  });
+
+  it("cannot complete a placement with missing or unreviewed reports unless an admin records an exception", async () => {
+    const foster = await createOldActiveFoster();
+    const end = (token, body) => request(app).put(`/api/foster/${foster._id}/end`).set("Authorization", `Bearer ${token}`).send({ outcome: "RETURNED", finalHealthCheck: HEALTH_CHECK, ...body });
+
+    expect((await end(staffToken, {})).status).toBe(409);
+
+    const exception = { completionException: { reason: "Fosterer was unreachable; checked in person." } };
+    expect((await end(staffToken, exception)).status).toBe(403);
+
+    const admin = await registerAndLogin("foster-admin@example.com", "admin");
+    const done = await end(admin.token, exception);
+    expect(done.status).toBe(200);
+    const stored = await Foster.findById(foster._id);
+    expect(stored.status).toBe("completed");
+    expect(stored.completionException.reason).toBe(exception.completionException.reason);
+    expect(stored.completionException.missingWeeks).toHaveLength(5);
+    const returned = await Pet.findById(pet._id);
+    expect(returned.status).toBe("Available");
+    expect(returned.owner).toBeNull();
+    expect(returned.currentFosterer).toBeNull();
+  });
+
+  it("completes normally once every report is submitted and reviewed, and a health concern needs a vet check", async () => {
+    const foster = await createOldActiveFoster();
+    await seedReports(foster, { extra: { vetVisitRequired: true } });
+    const end = (body) => request(app).put(`/api/foster/${foster._id}/end`).set("Authorization", `Bearer ${staffToken}`).send({ outcome: "ADOPTED", ...body });
+
+    expect((await end({ finalHealthCheck: HEALTH_CHECK })).status).toBe(409);
+    const done = await end({ finalHealthCheck: { ...HEALTH_CHECK, vetVerified: true } });
+    expect(done.status).toBe(200);
+    const adopted = await Pet.findById(pet._id);
+    expect(adopted.status).toBe("Adopted");
+    expect(String(adopted.owner)).toBe(String(applicantUserId));
+    expect(adopted.currentFosterer).toBeNull();
+  });
+
+  it("keeps the shelter as the owner during foster care: the fosterer is only currentFosterer", async () => {
+    await createApprovedFosterApplication(applicantToken, staffToken, pet);
+    const stored = await Pet.findById(pet._id);
+    expect(stored.status).toBe("Foster");
+    expect(stored.owner).toBeNull();
+    expect(String(stored.currentFosterer)).toBe(String(applicantUserId));
+
+    const mine = await request(app).get("/api/pets/my-pets").set("Authorization", `Bearer ${applicantToken}`);
+    expect(mine.body.data.map((p) => String(p._id))).toContain(String(pet._id));
+  });
+
+  it("lets the fosterer ask for an emergency return and alerts staff, who can then return the pet without the report gate", async () => {
+    const foster = await createOldActiveFoster();
+    const staff = await User.findOne({ email: "foster-staff@example.com" });
+
+    const asked = await request(app)
+      .post(`/api/foster/${foster._id}/return-request`)
+      .set("Authorization", `Bearer ${applicantToken}`)
+      .send({ urgency: "emergency", reason: "I have to go to the hospital today" });
+    expect(asked.status).toBe(201);
+    expect(await Notification.countDocuments({ recipient: staff._id, type: "FOSTER_RETURN_REQUEST" })).toBe(1);
+
+    const returned = await request(app)
       .put(`/api/foster/${foster._id}/end`)
       .set("Authorization", `Bearer ${staffToken}`)
-      .send({ outcome: "EXTENDED", extensionDays: 20 });
-    expect(tooMuch.status).toBe(409);
+      .send({ outcome: "RETURNED", finalHealthCheck: HEALTH_CHECK });
+    expect(returned.status).toBe(200);
+    const stored = await Foster.findById(foster._id);
+    expect(stored.returnRequest.status).toBe("resolved");
+    expect(stored.completionException.reason).toMatch(/Emergency return/);
   });
 
   it("keeps a placement's reports private to the fosterer and staff", async () => {

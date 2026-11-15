@@ -16,6 +16,8 @@ export interface AppUser {
   notificationsEnabled: boolean;
   phone?: string | null;
   address?: string | null;
+  isRenting?: boolean;
+  landlordProofUrl?: string | null;
 }
 
 interface AuthContextValue {

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { View, Text, ScrollView, Pressable, Switch, Alert } from "react-native";
+import { View, Text, ScrollView, Pressable, Alert } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -44,14 +44,14 @@ export default function ApplyToPetScreen() {
   const type = typeParam === "foster" ? "foster" : "adoption";
   const isFoster = type === "foster";
   const { user } = useAuth();
-  // Start from what the user saved in Settings so they don't retype it.
-  const [phone, setPhone] = useState(user?.phone ?? "");
-  const [address, setAddress] = useState(user?.address ?? "");
+  // Phone, address and renting details live in Settings; the application reuses them.
+  const phone = user?.phone?.trim() ?? "";
+  const address = user?.address?.trim() ?? "";
+  const isRenting = Boolean(user?.isRenting);
+  const landlordProofUrl = user?.landlordProofUrl ?? null;
   const missingProfileFields = getMissingProfileFields(user);
   const [experience, setExperience] = useState("");
   const [householdSize, setHouseholdSize] = useState("");
-  const [isRenting, setIsRenting] = useState(false);
-  const [landlordApproval, setLandlordApproval] = useState(false);
   const [fosterDays, setFosterDays] = useState<number | null>(null);
   const [pickupDate, setPickupDate] = useState<string | null>(null);
   const [pickupMethod, setPickupMethod] = useState<(typeof PICKUP_METHODS)[number]["value"]>("Shelter pickup");
@@ -61,7 +61,11 @@ export default function ApplyToPetScreen() {
 
   async function handleSubmit() {
     if (!phone || !address) {
-      setError("Phone and address are required.");
+      setError("Phone and address are required. Add them in Settings first.");
+      return;
+    }
+    if (isRenting && !landlordProofUrl) {
+      setError("You are renting, so please upload a photo of your landlord's approval in Settings first.");
       return;
     }
     if (isFoster && !fosterDays) {
@@ -78,7 +82,7 @@ export default function ApplyToPetScreen() {
         experience,
         householdSize: householdSize ? Number(householdSize) : undefined,
         isRenting,
-        landlordApproval,
+        landlordApproval: isRenting && Boolean(landlordProofUrl),
         type,
         ...(isFoster && fosterDays ? { fosterDays, fosterPeriod: `${fosterDays} days` } : {}),
         ...(isFoster && pickupDate ? { preferredPickupDate: pickupDate, preferredPickupMethod: pickupMethod } : {}),
@@ -128,8 +132,27 @@ export default function ApplyToPetScreen() {
           </View>
         )}
 
-        <FormInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="apply-phone" />
-        <FormInput label="Home address" value={address} onChangeText={setAddress} testID="apply-address" />
+        <View className="mb-4 rounded-xl border border-border bg-white px-4 py-3" testID="apply-profile-summary">
+          <View className="flex-row items-center justify-between">
+            <Text className="font-sans-medium text-sm text-ink">Your details</Text>
+            <Pressable
+              onPress={() => router.push("/(tabs)/settings")}
+              accessibilityRole="button"
+              accessibilityLabel="Edit your details in Settings"
+              testID="apply-edit-settings"
+            >
+              <Text className="font-sans-medium text-sm text-primary">Edit in Settings</Text>
+            </Pressable>
+          </View>
+          <Text className="mt-2 font-sans text-xs text-muted">Phone number</Text>
+          <Text className="font-sans text-sm text-ink" testID="apply-phone">{phone || "Not added yet"}</Text>
+          <Text className="mt-2 font-sans text-xs text-muted">Home address</Text>
+          <Text className="font-sans text-sm text-ink" testID="apply-address">{address || "Not added yet"}</Text>
+          <Text className="mt-2 font-sans text-xs text-muted">Housing</Text>
+          <Text className="font-sans text-sm text-ink" testID="apply-housing">
+            {isRenting ? (landlordProofUrl ? "Renting · landlord approval photo added" : "Renting · landlord approval photo missing") : "Not renting"}
+          </Text>
+        </View>
         {isFoster && (
           <View className="mb-4 gap-1.5" testID="apply-foster-period">
             <Text className="font-sans-medium text-sm text-ink">How long can you foster?</Text>
@@ -208,23 +231,6 @@ export default function ApplyToPetScreen() {
           style={{ minHeight: 96, textAlignVertical: "top" }}
           testID="apply-experience"
         />
-
-        <View className="mb-4 flex-row items-center justify-between rounded-xl border border-border bg-white px-4 py-3">
-          <Text className="font-sans text-sm text-ink">I am renting my home</Text>
-          <Switch
-            value={isRenting}
-            onValueChange={setIsRenting}
-            trackColor={{ true: colors.primary, false: colors.border }}
-            testID="apply-renting-switch"
-          />
-        </View>
-
-        {isRenting && (
-          <View className="mb-4 flex-row items-center justify-between rounded-xl border border-border bg-white px-4 py-3">
-            <Text className="flex-1 pr-2 font-sans text-sm text-ink">My landlord has approved pet ownership</Text>
-            <Switch value={landlordApproval} onValueChange={setLandlordApproval} trackColor={{ true: colors.primary, false: colors.border }} />
-          </View>
-        )}
 
         <PrimaryButton label={isFoster ? "Submit foster application" : "Submit application"} onPress={handleSubmit} loading={submitting} className="mt-2" testID="apply-submit" />
       </ScrollView>

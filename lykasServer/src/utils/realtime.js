@@ -53,6 +53,7 @@ const OWNER_FIELDS = [
   "donatedBy",
   "paidBy",
   "owner",
+  "currentFosterer",
   "assignedTo",
 ];
 

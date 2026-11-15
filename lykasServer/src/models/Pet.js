@@ -43,7 +43,11 @@ const petSchema = new mongoose.Schema(
       default: "Available",
       index: true,
     },
+    // The adoption owner: set only when an adoption is finalized. While a pet is in
+    // foster care it stays null, i.e. the shelter still owns the animal.
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    // Temporary caregiver during a foster placement. Not the legal owner.
+    currentFosterer: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
     shelterId: { type: mongoose.Schema.Types.ObjectId, ref: "Shelter", default: null, index: true },
     isDeleted: { type: Boolean, default: false, index: true },
     deletedAt: { type: Date, default: null },

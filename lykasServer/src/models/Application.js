@@ -29,6 +29,8 @@ const applicationSchema = new mongoose.Schema(
     householdSize: { type: Number },
     isRenting: { type: Boolean, default: false },
     landlordApproval: { type: Boolean, default: false },
+    // Copy of the applicant's landlord-approval photo at the time they applied.
+    landlordProofUrl: { type: String, default: null },
     type: { type: String, enum: ["adoption", "foster"], default: "adoption", index: true },
     fosterPeriod: { type: String },
     // Days the applicant offered to foster (30/45/60 in the app); staff use it to prefill the placement.

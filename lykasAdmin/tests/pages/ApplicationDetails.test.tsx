@@ -294,6 +294,25 @@ describe("ApplicationDetails page", () => {
     expect(await screen.findByText(/Missing information: phone number, household size, pet experience\./)).toBeInTheDocument();
   });
 
+  it("shows the landlord approval photo for a renter, linking to the full image", async () => {
+    renderPage({ isRenting: true, landlordApproval: true, landlordProofUrl: "https://img.test/landlord.jpg" });
+    const img = await screen.findByAltText("Landlord approval for pets");
+    expect(img).toHaveAttribute("src", "https://img.test/landlord.jpg");
+    expect(img.closest("a")).toHaveAttribute("href", "https://img.test/landlord.jpg");
+  });
+
+  it("says the landlord photo was not provided for a renter without one, and hides it for non-renters", async () => {
+    const { unmount } = renderPage({ isRenting: true, landlordApproval: false, landlordProofUrl: null });
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.getByText("Landlord approval photo")).toBeInTheDocument();
+    expect(screen.queryByAltText("Landlord approval for pets")).toBeNull();
+    unmount();
+
+    renderPage({ isRenting: false });
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("Landlord approval photo")).toBeNull();
+  });
+
   it("does not warn when the application is complete", async () => {
     renderPage();
     await screen.findByText("Maria Santos");

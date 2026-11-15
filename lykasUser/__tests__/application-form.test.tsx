@@ -21,7 +21,7 @@ jest.mock("../utils/api", () => {
 
 import { api } from "../utils/api";
 
-let mockUser: { phone?: string | null; address?: string | null } | null = null;
+let mockUser: { phone?: string | null; address?: string | null; isRenting?: boolean; landlordProofUrl?: string | null } | null = null;
 jest.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: mockUser }) }));
 
 describe("Adoption application form", () => {
@@ -30,16 +30,18 @@ describe("Adoption application form", () => {
     mockReplace.mockReset();
     mockBack.mockReset();
     mockParams = { id: "pet1" };
-    mockUser = { phone: null, address: null };
+    // Phone and address now come from the saved profile (Settings).
+    mockUser = { phone: "0917000000", address: "123 Main St" };
     jest.spyOn(Alert, "alert").mockImplementation(() => {});
   });
 
   it("shows a validation error when phone and address are missing, without calling the API", async () => {
+    mockUser = { phone: null, address: null };
     render(<ApplyToPetScreen />);
 
     fireEvent.press(screen.getByTestId("apply-submit"));
 
-    await waitFor(() => expect(screen.getByText("Phone and address are required.")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Phone and address are required/)).toBeTruthy());
     expect(api.post).not.toHaveBeenCalled();
   });
 
@@ -48,8 +50,6 @@ describe("Adoption application form", () => {
 
     render(<ApplyToPetScreen />);
 
-    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
     fireEvent.press(screen.getByTestId("apply-submit"));
 
     await waitFor(() =>
@@ -74,8 +74,6 @@ describe("Adoption application form", () => {
 
     render(<ApplyToPetScreen />);
 
-    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
     fireEvent.changeText(screen.getByTestId("apply-household"), "4");
     fireEvent.changeText(screen.getByTestId("apply-experience"), "Had two dogs growing up.");
     fireEvent.press(screen.getByTestId("apply-submit"));
@@ -88,14 +86,40 @@ describe("Adoption application form", () => {
     );
   });
 
-  it("shows the landlord-approval toggle only after renting is enabled", () => {
+  it("shows the profile details read-only, with no phone, address or renting inputs", () => {
+    mockUser = { phone: "0917000000", address: "123 Main St", isRenting: false };
     render(<ApplyToPetScreen />);
 
-    expect(screen.queryByText("My landlord has approved pet ownership")).toBeNull();
+    expect(screen.getByTestId("apply-phone").props.children).toBe("0917000000");
+    expect(screen.getByTestId("apply-address").props.children).toBe("123 Main St");
+    expect(screen.getByText("Not renting")).toBeTruthy();
+    expect(screen.queryByText("I am renting my home")).toBeNull();
+  });
 
-    fireEvent(screen.getByTestId("apply-renting-switch"), "valueChange", true);
+  it("blocks a renter who has not uploaded a landlord approval photo in Settings", async () => {
+    mockUser = { phone: "0917000000", address: "123 Main St", isRenting: true, landlordProofUrl: null };
+    render(<ApplyToPetScreen />);
 
-    expect(screen.getByText("My landlord has approved pet ownership")).toBeTruthy();
+    expect(screen.getByText("Renting · landlord approval photo missing")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("apply-submit"));
+
+    await waitFor(() => expect(screen.getByText(/upload a photo of your landlord's approval/)).toBeTruthy());
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it("sends renting details from the profile when the landlord photo is on file", async () => {
+    mockUser = { phone: "0917000000", address: "123 Main St", isRenting: true, landlordProofUrl: "https://img.example/proof.jpg" };
+    jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
+    render(<ApplyToPetScreen />);
+
+    expect(screen.getByText("Renting · landlord approval photo added")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("apply-submit"));
+
+    await waitFor(() =>
+      expect(api.post).toHaveBeenCalledWith("/api/applications", expect.objectContaining({ isRenting: true, landlordApproval: true }))
+    );
+    // The photo URL is copied server-side from the profile, never sent by the app.
+    expect(jest.mocked(api.post).mock.calls[0][1]).not.toHaveProperty("landlordProofUrl");
   });
 
   it("shows a server error message when submission fails, without navigating away", async () => {
@@ -106,8 +130,6 @@ describe("Adoption application form", () => {
 
     render(<ApplyToPetScreen />);
 
-    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
     fireEvent.press(screen.getByTestId("apply-submit"));
 
     await waitFor(() => expect(screen.getByText("This pet is not currently available")).toBeTruthy());
@@ -121,8 +143,6 @@ describe("Adoption application form", () => {
     expect(screen.getByText("Adoption application")).toBeTruthy();
     expect(screen.queryByTestId("apply-foster-period")).toBeNull();
 
-    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
     fireEvent.press(screen.getByTestId("apply-submit"));
 
     await waitFor(() => expect(api.post).toHaveBeenCalled());
@@ -139,8 +159,6 @@ describe("Adoption application form", () => {
     expect(screen.getByText("Adoption application")).toBeTruthy();
     expect(screen.queryByTestId("apply-foster-period")).toBeNull();
 
-    fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-    fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
     fireEvent.press(screen.getByTestId("apply-submit"));
 
     await waitFor(() => expect(api.post).toHaveBeenCalled());
@@ -167,8 +185,6 @@ describe("Adoption application form", () => {
     it("blocks submit without a foster period", async () => {
       render(<ApplyToPetScreen />);
 
-      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
       fireEvent.press(screen.getByTestId("apply-submit"));
 
       await waitFor(() => expect(screen.getByText("Please tell us how long you can foster.")).toBeTruthy());
@@ -179,8 +195,6 @@ describe("Adoption application form", () => {
       jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
       render(<ApplyToPetScreen />);
 
-      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
       fireEvent.press(screen.getByTestId("apply-foster-30"));
       fireEvent.press(screen.getByTestId("apply-submit"));
       await waitFor(() => expect(api.post).toHaveBeenCalledTimes(1));
@@ -200,8 +214,6 @@ describe("Adoption application form", () => {
       jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
       render(<ApplyToPetScreen />);
 
-      fireEvent.changeText(screen.getByTestId("apply-phone"), "0917000000");
-      fireEvent.changeText(screen.getByTestId("apply-address"), "123 Main St");
       fireEvent.press(screen.getByTestId("apply-foster-45"));
       fireEvent.press(screen.getByTestId("apply-submit"));
 
@@ -222,12 +234,13 @@ describe("Adoption application form", () => {
   });
 
   it("recommends completing the profile when phone and address are missing", () => {
+    mockUser = { phone: null, address: null };
     render(<ApplyToPetScreen />);
     expect(screen.getByTestId("apply-complete-profile")).toBeTruthy();
     expect(screen.getByText(/no phone number and home address/)).toBeTruthy();
   });
 
-  it("prefills phone and address from the profile and hides the recommendation", async () => {
+  it("uses phone and address from the profile and hides the recommendation", async () => {
     mockUser = { phone: "0917111222", address: "9 Rizal Ave" };
     jest.mocked(api.post).mockResolvedValue({ data: { success: true } });
     render(<ApplyToPetScreen />);

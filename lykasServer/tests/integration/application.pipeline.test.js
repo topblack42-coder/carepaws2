@@ -193,7 +193,8 @@ describe("Application pipeline: submit -> stage transitions -> approve/reject", 
     expect(adoptedPet.status).toBe("Adopted");
     expect(adoptedPet.owner?.toString()).toBe(applicantUserId);
 
-    // A foster application should mark the pet Foster (not Adopted) and still assign the owner.
+    // A foster application should mark the pet Foster (not Adopted). The fosterer is only the
+    // temporary caregiver: the shelter stays the owner until an adoption is finalized.
     const pet2 = await Pet.create({ name: "Ginger", species: "Cat", status: "Available" });
     const fosterSubmit = await request(app)
       .post("/api/applications")
@@ -208,7 +209,8 @@ describe("Application pipeline: submit -> stage transitions -> approve/reject", 
 
     const fosteredPet = await Pet.findById(pet2._id);
     expect(fosteredPet.status).toBe("Foster");
-    expect(fosteredPet.owner?.toString()).toBe(applicantUserId);
+    expect(fosteredPet.owner).toBeNull();
+    expect(fosteredPet.currentFosterer?.toString()).toBe(applicantUserId);
   });
 
   it("does not allow an approved application to be reopened", async () => {

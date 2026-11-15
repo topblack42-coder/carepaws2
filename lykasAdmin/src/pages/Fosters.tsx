@@ -12,6 +12,7 @@ import TextArea from "../components/ui/TextArea";
 import { FormField, Input, Select } from "../components/ui/FormUI";
 import { useToast } from "../context/ToastContext";
 import { useRealtime } from "../context/RealtimeContext";
+import { useAuth } from "../context/AuthContext";
 import FosterReportsModal from "../components/fosters/FosterReportsModal";
 import { attentionReasons } from "../utils/fosterReports";
 
@@ -22,12 +23,36 @@ interface Foster {
   startDate: string;
   expectedEndDate?: string;
   extendedDays?: number;
+  extensions?: unknown[];
+  returnRequest?: { urgency: "routine" | "emergency"; reason: string; status: "open" | "resolved" };
   status: string;
   weeklyReportsSubmitted: number;
   weeklyReportsRequired: number;
 }
 
 const MAX_EXTENSION_DAYS = 30;
+const MIN_EXTENSION_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type ManageMode = "EXTEND" | "ADOPTED" | "RETURNED";
+
+interface Readiness {
+  canFinalize: boolean;
+  missingReports: number;
+  unreviewedReports: number;
+  requiresVetCheck: boolean;
+  healthFlags: { weekNumber: number; reasons: string[] }[];
+  returnRequest: { urgency: "routine" | "emergency"; reason: string } | null;
+}
+
+/** How close a placement is to its end date, for the list badge. Mirrors the server's alert stages. */
+function endDateBadge(f: Foster): { label: string; tone: "danger" | "warning" } | null {
+  if (f.status !== "active" || !f.expectedEndDate) return null;
+  const ms = new Date(f.expectedEndDate).getTime() - Date.now();
+  if (ms < 0) return { label: `Overdue ${Math.max(1, Math.floor(-ms / DAY_MS))}d`, tone: "danger" };
+  const days = Math.ceil(ms / DAY_MS);
+  return days <= 7 ? { label: days <= 1 ? "Ends tomorrow" : `Ends in ${days}d`, tone: "warning" } : null;
+}
 
 interface FosterApplication {
   _id: string;
@@ -44,6 +69,8 @@ interface FosterApplication {
 export default function Fosters() {
   const list = useResourceList<Foster>("/api/foster");
   const { showToast } = useToast();
+  const { hasRole } = useAuth();
+  const isAdmin = hasRole("admin", "super_admin");
   const [creating, setCreating] = useState(false);
   const [applications, setApplications] = useState<FosterApplication[]>([]);
   const [applicationId, setApplicationId] = useState("");
@@ -84,10 +111,17 @@ export default function Fosters() {
 
   // Finishing or extending an active placement.
   const [managing, setManaging] = useState<Foster | null>(null);
-  const [outcome, setOutcome] = useState<"ADOPTED" | "RETURNED" | "EXTENDED">("EXTENDED");
+  const [mode, setMode] = useState<ManageMode>("EXTEND");
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [extensionDays, setExtensionDays] = useState("14");
+  const [extensionReason, setExtensionReason] = useState("");
+  const [vetAgreed, setVetAgreed] = useState(false);
+  const [vetNotes, setVetNotes] = useState("");
+  const [fostererAgreed, setFostererAgreed] = useState(false);
+  const [healthNotes, setHealthNotes] = useState("");
+  const [vetVerified, setVetVerified] = useState(false);
+  const [exceptionReason, setExceptionReason] = useState("");
   const [staffNotes, setStaffNotes] = useState("");
-  const [missingReports, setMissingReports] = useState(0);
   const [manageError, setManageError] = useState<string | null>(null);
   const [managingSaving, setManagingSaving] = useState(false);
 
@@ -98,8 +132,15 @@ export default function Fosters() {
     {
       key: "endsOn",
       header: "Ends",
-      accessor: (f) =>
-        f.expectedEndDate ? `${new Date(f.expectedEndDate).toLocaleDateString()}${f.extendedDays ? ` (+${f.extendedDays}d)` : ""}` : "—",
+      accessor: (f) => {
+        const badge = endDateBadge(f);
+        const date = f.expectedEndDate ? `${new Date(f.expectedEndDate).toLocaleDateString()}${f.extendedDays ? ` (+${f.extendedDays}d)` : ""}` : "—";
+        return badge ? (
+          <span className="flex flex-wrap items-center gap-2">{date} <StatusBadge status={badge.label} tone={badge.tone} /></span>
+        ) : (
+          date
+        );
+      },
     },
     { key: "reports", header: "Weekly reports", accessor: (f) => `${f.weeklyReportsSubmitted}/${f.weeklyReportsRequired}` },
     {
@@ -115,7 +156,19 @@ export default function Fosters() {
         );
       },
     },
-    { key: "status", header: "Status", accessor: (f) => <StatusBadge status={f.status} /> },
+    {
+      key: "status",
+      header: "Status",
+      accessor: (f) =>
+        f.status === "active" && f.returnRequest?.status === "open" ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={f.status} />
+            <StatusBadge status={f.returnRequest.urgency === "emergency" ? "Emergency return" : "Return requested"} tone={f.returnRequest.urgency === "emergency" ? "danger" : "warning"} />
+          </span>
+        ) : (
+          <StatusBadge status={f.status} />
+        ),
+    },
   ];
 
   async function openPlacementModal() {
@@ -161,37 +214,82 @@ export default function Fosters() {
 
   async function openManageModal(foster: Foster) {
     setManaging(foster);
-    setOutcome("EXTENDED");
+    setMode(foster.returnRequest?.status === "open" ? "RETURNED" : "EXTEND");
     setExtensionDays("14");
+    setExtensionReason("");
+    setVetAgreed(false);
+    setVetNotes("");
+    setFostererAgreed(false);
+    setHealthNotes("");
+    setVetVerified(false);
+    setExceptionReason("");
     setStaffNotes("");
     setManageError(null);
-    setMissingReports(0);
+    setReadiness(null);
     try {
       const res = await api.get(`/api/foster/${foster._id}/can-finalize`);
-      setMissingReports(res.data.data?.missingReports ?? 0);
+      setReadiness(res.data.data ?? null);
     } catch {
-      /* the warning is optional; ending still works */
+      /* the checklist is advisory; the server enforces the same rules when saving */
     }
   }
 
   async function submitManage(e: FormEvent) {
     e.preventDefault();
     if (!managing) return;
-    const days = Number(extensionDays);
-    const remaining = MAX_EXTENSION_DAYS - (managing.extendedDays ?? 0);
-    if (outcome === "EXTENDED" && (!Number.isInteger(days) || days < 7 || days > remaining)) {
-      setManageError(`Extend by 7 to ${remaining} days.`);
-      return;
-    }
-    setManagingSaving(true);
     setManageError(null);
+
+    if (mode === "EXTEND") {
+      const days = Number(extensionDays);
+      const remaining = MAX_EXTENSION_DAYS - (managing.extendedDays ?? 0);
+      if (!Number.isInteger(days) || days < MIN_EXTENSION_DAYS || days > remaining) {
+        setManageError(`Extend by ${MIN_EXTENSION_DAYS} to ${remaining} days.`);
+        return;
+      }
+      if (extensionReason.trim().length < 10) {
+        setManageError("Explain why the extension is needed (at least 10 characters).");
+        return;
+      }
+      if (!fostererAgreed) {
+        setManageError("The fosterer must agree to the extension.");
+        return;
+      }
+    } else {
+      if (healthNotes.trim().length < 10) {
+        setManageError("Record the health check you did (at least 10 characters). Weekly reports alone do not prove the pet is healthy.");
+        return;
+      }
+      if (readiness?.requiresVetCheck && !vetVerified) {
+        setManageError("A weekly report raised a health concern. A veterinarian must check the pet first.");
+        return;
+      }
+      if (needsException && exceptionReason.trim().length < 10) {
+        setManageError("Some reports are missing or unreviewed. Review them, or have an admin record the reason for an exception.");
+        return;
+      }
+    }
+
+    setManagingSaving(true);
     try {
-      await api.put(`/api/foster/${managing._id}/end`, {
-        outcome,
-        ...(outcome === "EXTENDED" ? { extensionDays: days } : {}),
-        ...(staffNotes.trim() ? { staffNotes: staffNotes.trim() } : {}),
-      });
-      showToast(outcome === "EXTENDED" ? `Foster period extended by ${days} days` : "Foster placement completed", "success");
+      if (mode === "EXTEND") {
+        const days = Number(extensionDays);
+        await api.put(`/api/foster/${managing._id}/extend`, {
+          extensionDays: days,
+          reason: extensionReason.trim(),
+          vetAgreed,
+          fostererAgreed,
+          ...(vetNotes.trim() ? { vetNotes: vetNotes.trim() } : {}),
+        });
+        showToast(`Foster period extended by ${days} days`, "success");
+      } else {
+        await api.put(`/api/foster/${managing._id}/end`, {
+          outcome: mode,
+          finalHealthCheck: { notes: healthNotes.trim(), vetVerified },
+          ...(needsException && exceptionReason.trim() ? { completionException: { reason: exceptionReason.trim() } } : {}),
+          ...(staffNotes.trim() ? { staffNotes: staffNotes.trim() } : {}),
+        });
+        showToast("Foster placement completed", "success");
+      }
       setManaging(null);
       list.reload();
     } catch (err) {
@@ -252,6 +350,11 @@ export default function Fosters() {
       setSaving(false);
     }
   }
+
+  // Reports missing or unreviewed block completion; an open emergency return waives the check.
+  const reportsIncomplete = !!readiness && (readiness.missingReports > 0 || readiness.unreviewedReports > 0);
+  const emergencyReturn = mode === "RETURNED" && readiness?.returnRequest?.urgency === "emergency";
+  const needsException = reportsIncomplete && !emergencyReturn;
 
   return (
     <div>
@@ -362,41 +465,104 @@ export default function Fosters() {
         footer={<>
           <Button variant="secondary" onClick={() => setManaging(null)} disabled={managingSaving}>Cancel</Button>
           <Button type="submit" form="manage-foster-placement" loading={managingSaving}>
-            {outcome === "EXTENDED" ? "Extend foster period" : "Complete placement"}
+            {mode === "EXTEND" ? "Extend foster period" : "Complete placement"}
           </Button>
         </>}
       >
         <form id="manage-foster-placement" onSubmit={submitManage}>
           {manageError && <div className="mb-4"><Alert tone="danger">{manageError}</Alert></div>}
-          {outcome !== "EXTENDED" && missingReports > 0 && (
-            <div className="mb-4"><Alert tone="warning">{missingReports} weekly {missingReports === 1 ? "report is" : "reports are"} still missing for this placement.</Alert></div>
+          {readiness?.returnRequest && (
+            <div className="mb-4">
+              <Alert tone={readiness.returnRequest.urgency === "emergency" ? "danger" : "warning"}>
+                {readiness.returnRequest.urgency === "emergency" ? "Emergency return requested" : "Return requested"}: {readiness.returnRequest.reason}
+              </Alert>
+            </div>
+          )}
+          {reportsIncomplete && (
+            <div className="mb-4">
+              <Alert tone="warning">
+                {readiness!.missingReports > 0 && `${readiness!.missingReports} weekly ${readiness!.missingReports === 1 ? "report is" : "reports are"} missing. `}
+                {readiness!.unreviewedReports > 0 && `${readiness!.unreviewedReports} ${readiness!.unreviewedReports === 1 ? "report has" : "reports have"} not been reviewed. `}
+                Use "View reports" to review them first.
+              </Alert>
+            </div>
+          )}
+          {readiness?.requiresVetCheck && (
+            <div className="mb-4">
+              <Alert tone="danger">
+                A weekly report raised a health concern (week {readiness.healthFlags.map((f) => f.weekNumber).join(", ")}). A veterinarian must agree before you extend or complete.
+              </Alert>
+            </div>
           )}
           <FormField label="What is happening?" htmlFor="foster-outcome">
-            <Select id="foster-outcome" value={outcome} onChange={(e) => setOutcome(e.target.value as typeof outcome)}>
-              <option value="EXTENDED">Extend the foster period</option>
+            <Select id="foster-outcome" value={mode} onChange={(e) => setMode(e.target.value as ManageMode)}>
+              <option value="EXTEND">Extend the foster period</option>
               <option value="ADOPTED">Fosterer is adopting the pet</option>
               <option value="RETURNED">Pet is returned to the shelter</option>
             </Select>
           </FormField>
-          {outcome === "EXTENDED" && (
-            <FormField label="Extend by (days)" htmlFor="foster-extension">
-              <Input
-                id="foster-extension"
-                type="number"
-                min={7}
-                max={MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)}
-                required
-                value={extensionDays}
-                onChange={(e) => setExtensionDays(e.target.value)}
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Up to {MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)} more days can be added. The pet stays with the fosterer and weekly reports continue.
-              </p>
-            </FormField>
+
+          {mode === "EXTEND" ? (
+            <>
+              <FormField label="Extend by (days)" htmlFor="foster-extension">
+                <Input
+                  id="foster-extension"
+                  type="number"
+                  min={MIN_EXTENSION_DAYS}
+                  max={MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)}
+                  required
+                  value={extensionDays}
+                  onChange={(e) => setExtensionDays(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  {MIN_EXTENSION_DAYS} to {MAX_EXTENSION_DAYS - (managing?.extendedDays ?? 0)} days. The pet stays with the fosterer, stays in foster care, and weekly reports continue.
+                </p>
+              </FormField>
+              <FormField label="Why is an extension needed?" htmlFor="foster-extension-reason">
+                <TextArea id="foster-extension-reason" rows={3} required value={extensionReason} onChange={(e) => setExtensionReason(e.target.value)} />
+              </FormField>
+              <label className="mb-2 flex items-start gap-2 text-sm text-gray-800">
+                <input type="checkbox" className="mt-0.5" checked={fostererAgreed} onChange={(e) => setFostererAgreed(e.target.checked)} />
+                The fosterer agreed to the extension
+              </label>
+              <label className="mb-2 flex items-start gap-2 text-sm text-gray-800">
+                <input type="checkbox" className="mt-0.5" checked={vetAgreed} onChange={(e) => setVetAgreed(e.target.checked)} />
+                A veterinarian agreed to the extension
+              </label>
+              {vetAgreed && (
+                <FormField label="Vet notes (optional)" htmlFor="foster-vet-notes">
+                  <TextArea id="foster-vet-notes" rows={2} value={vetNotes} onChange={(e) => setVetNotes(e.target.value)} />
+                </FormField>
+              )}
+              <p className="text-xs text-gray-500">Recorded under your name as the person who authorized the extension. All due weekly reports must be submitted and reviewed first.</p>
+            </>
+          ) : (
+            <>
+              <FormField label="Health check you did on the pet" htmlFor="foster-health-notes">
+                <TextArea id="foster-health-notes" rows={3} required value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)} />
+                <p className="mt-1 text-xs text-gray-500">Weekly reports are the fosterer's own account. Record what staff or a vet saw in person.</p>
+              </FormField>
+              <label className="mb-3 flex items-start gap-2 text-sm text-gray-800">
+                <input type="checkbox" className="mt-0.5" checked={vetVerified} onChange={(e) => setVetVerified(e.target.checked)} />
+                A veterinarian checked the pet
+              </label>
+              {needsException && (
+                isAdmin ? (
+                  <FormField label="Admin exception: why complete with missing or unreviewed reports?" htmlFor="foster-exception">
+                    <TextArea id="foster-exception" rows={2} value={exceptionReason} onChange={(e) => setExceptionReason(e.target.value)} />
+                  </FormField>
+                ) : (
+                  <div className="mb-3"><Alert tone="info">Only an admin can complete a placement with missing or unreviewed reports. Review the reports, or ask an admin.</Alert></div>
+                )
+              )}
+              {emergencyReturn && reportsIncomplete && (
+                <div className="mb-3"><Alert tone="info">This is an emergency return, so the report check is waived and the reason is recorded.</Alert></div>
+              )}
+              <FormField label="Notes (optional)" htmlFor="foster-notes">
+                <TextArea id="foster-notes" rows={2} value={staffNotes} onChange={(e) => setStaffNotes(e.target.value)} />
+              </FormField>
+            </>
           )}
-          <FormField label="Notes (optional)" htmlFor="foster-notes">
-            <TextArea id="foster-notes" rows={3} value={staffNotes} onChange={(e) => setStaffNotes(e.target.value)} />
-          </FormField>
         </form>
       </Modal>
     </div>

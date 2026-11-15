@@ -132,14 +132,21 @@ async function updatePet(req, res, next) {
     // pair in an inconsistent/impossible state.
     if (req.body.status && req.body.status !== pet.status) {
       const nextStatus = req.body.status;
-      if ((nextStatus === "Adopted" || nextStatus === "Foster") && !pet.owner) {
+      if (nextStatus === "Adopted" && !pet.owner) {
         return res.status(409).json({
           success: false,
-          message: `Cannot mark this pet as ${nextStatus} without an assigned owner. Use the adoption/foster application workflow to assign one.`,
+          message: "Cannot mark this pet as Adopted without an assigned owner. Use the adoption application workflow to assign one.",
+        });
+      }
+      if (nextStatus === "Foster" && !pet.currentFosterer) {
+        return res.status(409).json({
+          success: false,
+          message: "Cannot mark this pet as Foster without a current fosterer. Use the foster application workflow to assign one.",
         });
       }
       if (nextStatus === "Available" || nextStatus === "Pending") {
         pet.owner = null;
+        pet.currentFosterer = null;
       }
     }
 
@@ -277,10 +284,10 @@ async function permanentlyDeletePet(req, res, next) {
   }
 }
 
-// GET /api/pets/my-pets — pets the current user owns
+// GET /api/pets/my-pets — pets the current user owns or is currently fostering
 async function myPets(req, res, next) {
   try {
-    const pets = await Pet.find({ owner: req.user._id, isDeleted: { $ne: true } });
+    const pets = await Pet.find({ $or: [{ owner: req.user._id }, { currentFosterer: req.user._id }], isDeleted: { $ne: true } });
     return res.json({ success: true, data: pets });
   } catch (err) {
     next(err);

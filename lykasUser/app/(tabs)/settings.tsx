@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { View, Text, ScrollView, Switch, Alert, Pressable } from "react-native";
+import { View, Text, ScrollView, Switch, Alert, Pressable, Image } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,6 +19,9 @@ export default function SettingsScreen() {
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [address, setAddress] = useState(user?.address ?? "");
   const [savingContact, setSavingContact] = useState(false);
+  const [isRenting, setIsRenting] = useState(user?.isRenting ?? false);
+  const [proofUrl, setProofUrl] = useState(user?.landlordProofUrl ?? null);
+  const [housingBusy, setHousingBusy] = useState(false);
   // Based on what is saved on the account, not on what is typed but unsaved.
   const missingFields = getMissingProfileFields(user);
 
@@ -31,6 +35,67 @@ export default function SettingsScreen() {
       Alert.alert("Something went wrong", getApiErrorMessage(err));
     } finally {
       setSavingContact(false);
+    }
+  }
+
+  async function toggleRenting(value: boolean) {
+    setHousingBusy(true);
+    setIsRenting(value);
+    try {
+      await api.put("/api/auth/profile", { isRenting: value });
+      // The server clears the landlord photo when you stop renting.
+      if (!value) setProofUrl(null);
+      await refreshUser();
+    } catch (err) {
+      Alert.alert("Something went wrong", getApiErrorMessage(err));
+      setIsRenting(!value);
+    } finally {
+      setHousingBusy(false);
+    }
+  }
+
+  async function pickLandlordProof() {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission needed", "Allow photo library access to upload your landlord's approval.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    setHousingBusy(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", {
+        uri: asset.uri,
+        name: asset.fileName ?? "landlord-approval.jpg",
+        type: asset.mimeType ?? "image/jpeg",
+      } as unknown as Blob);
+      // No manual Content-Type: React Native adds the multipart boundary itself.
+      const res = await api.post("/api/auth/landlord-proof", formData);
+      setProofUrl(res.data?.data?.landlordProofUrl ?? asset.uri);
+      await refreshUser();
+    } catch (err) {
+      Alert.alert("Upload failed", getApiErrorMessage(err));
+    } finally {
+      setHousingBusy(false);
+    }
+  }
+
+  async function removeLandlordProof() {
+    setHousingBusy(true);
+    try {
+      await api.delete("/api/auth/landlord-proof");
+      setProofUrl(null);
+      await refreshUser();
+    } catch (err) {
+      Alert.alert("Something went wrong", getApiErrorMessage(err));
+    } finally {
+      setHousingBusy(false);
     }
   }
 
@@ -104,6 +169,68 @@ export default function SettingsScreen() {
           <FormInput label="Phone number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" testID="settings-phone" />
           <FormInput label="Home address" value={address} onChangeText={setAddress} testID="settings-address" />
           <PrimaryButton label="Save contact details" onPress={saveContact} loading={savingContact} className="mt-2" testID="settings-save-contact" />
+        </View>
+
+        <View className="mb-6 rounded-2xl border border-border bg-white p-4" testID="settings-housing">
+          <Text className="font-sans-medium text-base text-ink">Housing</Text>
+          <Text className="mb-1 mt-0.5 font-sans text-xs text-muted">Shared with the shelter when you apply to adopt or foster.</Text>
+          <View className="flex-row items-center justify-between py-2">
+            <Text className="flex-1 pr-4 font-sans text-sm text-ink">I am renting my home</Text>
+            <Switch
+              value={isRenting}
+              onValueChange={toggleRenting}
+              disabled={housingBusy}
+              trackColor={{ true: colors.primary, false: colors.border }}
+              testID="settings-renting-switch"
+            />
+          </View>
+
+          {isRenting && (
+            <View className="mt-2 gap-2" testID="settings-landlord-proof">
+              <Text className="font-sans-medium text-sm text-ink">Landlord approval for pets</Text>
+              <Text className="font-sans text-xs text-muted">
+                Upload a photo of your landlord&apos;s written OK (a letter, lease page, or message) so the shelter can check it.
+              </Text>
+              {proofUrl ? (
+                <View className="gap-2">
+                  <Image source={{ uri: proofUrl }} accessibilityLabel="Landlord approval photo" className="h-48 w-full rounded-xl bg-cream" resizeMode="cover" testID="settings-proof-image" />
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      onPress={pickLandlordProof}
+                      disabled={housingBusy}
+                      accessibilityRole="button"
+                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-border bg-white py-2.5"
+                    >
+                      <Ionicons name="swap-horizontal-outline" size={16} color={colors.primary} />
+                      <Text className="font-sans-medium text-sm text-ink">Replace</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={removeLandlordProof}
+                      disabled={housingBusy}
+                      accessibilityRole="button"
+                      testID="settings-proof-remove"
+                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl border border-border bg-white py-2.5"
+                    >
+                      <Ionicons name="trash-outline" size={16} color={colors.primary} />
+                      <Text className="font-sans-medium text-sm text-ink">Remove</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  onPress={pickLandlordProof}
+                  disabled={housingBusy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Upload landlord approval photo"
+                  testID="settings-proof-upload"
+                  className="flex-row items-center justify-center gap-2 rounded-xl border border-dashed border-primary bg-white py-4"
+                >
+                  <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />
+                  <Text className="font-sans-medium text-sm text-primary">{housingBusy ? "Uploading…" : "Upload photo"}</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
         </View>
 
         <View className="rounded-2xl border border-border bg-white p-4">

@@ -56,6 +56,11 @@ const userSchema = new mongoose.Schema(
     phoneVerified: { type: Boolean, default: false },
     addressConfirmed: { type: Boolean, default: false },
 
+    // Housing details, saved once in Settings and copied onto each application.
+    isRenting: { type: Boolean, default: false },
+    // Photo of the landlord's written OK for pets, so staff can check it.
+    landlordProofUrl: { type: String, default: null },
+
     identityVerificationStatus: {
       type: String,
       enum: ["unverified", "pending", "verified", "rejected"],
